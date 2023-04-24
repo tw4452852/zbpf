@@ -7,12 +7,10 @@ const libbpf = root.libbpf;
 
 test "array" {
     const obj_bytes = @embedFile("@array");
-    const bytes = try allocator.dupe(u8, obj_bytes);
-    defer allocator.free(bytes);
 
     _ = libbpf.libbpf_set_print(root.dbg_printf);
 
-    const obj = libbpf.bpf_object__open_mem(bytes.ptr, bytes.len, null);
+    const obj = libbpf.bpf_object__open_mem(obj_bytes.ptr, obj_bytes.len, null);
     if (obj == null) {
         print("failed to open bpf object: {}\n", .{std.os.errno(-1)});
         return error.OPEN;

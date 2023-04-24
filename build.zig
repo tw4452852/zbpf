@@ -1,10 +1,11 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const fs = std.fs;
+const Builder = std.build.Builder;
 
 const debugging = true;
 
-fn create_bpf_prog(b: *std.build.Builder, target: std.zig.CrossTarget, src_path: ?[]const u8) *std.build.CompileStep {
+fn create_bpf_prog(b: *Builder, target: std.zig.CrossTarget, src_path: ?[]const u8) *std.build.CompileStep {
     const name = fs.path.stem(src_path orelse "?");
 
     const pkg = b.addModule("bpf", .{
@@ -37,7 +38,7 @@ fn create_bpf_prog(b: *std.build.Builder, target: std.zig.CrossTarget, src_path:
     return prog;
 }
 
-fn create_libbpf(b: *std.build.Builder, target: std.zig.CrossTarget, optimize: std.builtin.Mode) *std.build.CompileStep {
+fn create_libbpf(b: *Builder, target: std.zig.CrossTarget, optimize: std.builtin.Mode) *std.build.CompileStep {
     const libbpf = b.addStaticLibrary(.{
         .name = "libbpf",
         .target = target,
@@ -76,7 +77,27 @@ fn create_libbpf(b: *std.build.Builder, target: std.zig.CrossTarget, optimize: s
     return libbpf;
 }
 
-pub fn build(b: *std.build.Builder) !void {
+fn create_mounting_tracefs_step(b: *Builder) *Builder.Step {
+    const S = struct {
+        fn make(s: *Builder.Step, _: *std.Progress.Node) !void {
+            fs.cwd().makeDir("src/bpf/tracefs") catch |e| if (e != std.os.MakeDirError.PathAlreadyExists) return s.fail("failed to create mounting dir: {s}", .{@errorName(e)});
+            const ret = std.os.linux.getErrno(std.os.linux.mount("zbpf", "src/bpf/tracefs", "tracefs", 0, 0));
+            if (ret != .SUCCESS and ret != .BUSY) {
+                return s.fail("failed to mount tracefs: {s}", .{@tagName(ret)});
+            }
+        }
+    };
+    const s = b.allocator.create(Builder.Step) catch @panic("OOM");
+    s.* = Builder.Step.init(.{
+        .id = .custom,
+        .name = "mount tracefs",
+        .owner = b,
+        .makeFn = S.make,
+    });
+    return s;
+}
+
+pub fn build(b: *Builder) !void {
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
     // means any target is allowed, and the default is native. Other options
@@ -87,16 +108,16 @@ pub fn build(b: *std.build.Builder) !void {
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const optimize = b.standardOptimizeOption(.{});
 
+    // mount tracefs for structure generation
+    const mounting_step = create_mounting_tracefs_step(b);
+
     // build bpf program
     const bpf_src = b.option([]const u8, "bpf", "bpf program source path");
     const prog = create_bpf_prog(b, target, bpf_src);
+    prog.step.dependOn(mounting_step);
 
     // build libbpf
     const libbpf = create_libbpf(b, target, optimize);
-
-    // mount tracefs for structure generation
-    fs.cwd().makeDir("src/bpf/tracefs") catch {};
-    _ = std.os.linux.getErrno(std.os.linux.mount("zbpf", "src/bpf/tracefs", "tracefs", 0, 0));
 
     const exe_src = b.option([]const u8, "main", "main executable source path");
     const exe = b.addExecutable(.{
@@ -159,6 +180,7 @@ pub fn build(b: *std.build.Builder) !void {
         exe_tests.addAnonymousModule(try std.fmt.allocPrint(b.allocator, "@{s}", .{fs.path.stem(entry.name)}), .{
             .source_file = bpf_prog.getOutputSource(),
         });
+        bpf_prog.step.dependOn(mounting_step);
     }
 
     // Similar to creating the run step earlier, this exposes a `test` step to
