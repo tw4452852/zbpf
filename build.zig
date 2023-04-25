@@ -5,20 +5,16 @@ const Builder = std.build.Builder;
 
 const debugging = true;
 
-fn create_bpf_prog(b: *Builder, target: std.zig.CrossTarget, src_path: ?[]const u8) *std.build.CompileStep {
+fn create_bpf_prog(ctx: *const Ctx, src_path: ?[]const u8) *std.build.CompileStep {
     const name = fs.path.stem(src_path orelse "?");
 
-    const pkg = b.addModule("bpf", .{
-        .source_file = .{ .path = "src/bpf/root.zig" },
-    });
-
-    const prog = b.addObject(.{
+    const prog = ctx.b.addObject(.{
         .name = name,
         .root_source_file = if (src_path) |path| .{
             .path = path,
         } else null,
         .target = .{
-            .cpu_arch = switch ((target.cpu_arch orelse builtin.cpu.arch).endian()) {
+            .cpu_arch = switch ((ctx.target.cpu_arch orelse builtin.cpu.arch).endian()) {
                 .Big => .bpfeb,
                 .Little => .bpfel,
             },
@@ -26,14 +22,15 @@ fn create_bpf_prog(b: *Builder, target: std.zig.CrossTarget, src_path: ?[]const 
         },
         .optimize = .ReleaseFast,
     });
-    prog.addModule("bpf", pkg);
+    prog.addModule("bpf", ctx.bpf);
     prog.linkLibC();
 
     if (debugging) {
         prog.emit_llvm_ir = .{
-            .emit_to = std.fmt.allocPrint(b.allocator, "/tmp/{s}.ir", .{name}) catch unreachable,
+            .emit_to = std.fmt.allocPrint(ctx.b.allocator, "/tmp/{s}.ir", .{name}) catch unreachable,
         };
     }
+    prog.step.dependOn(ctx.mounting_step);
 
     return prog;
 }
@@ -97,27 +94,42 @@ fn create_mounting_tracefs_step(b: *Builder) *Builder.Step {
     return s;
 }
 
-pub fn build(b: *Builder) !void {
-    // Standard target options allows the person running `zig build` to choose
-    // what target to build for. Here we do not override the defaults, which
-    // means any target is allowed, and the default is native. Other options
-    // for restricting supported target set are available.
-    const target = b.standardTargetOptions(.{});
+const Ctx = struct {
+    b: *Builder,
+    target: std.zig.CrossTarget,
+    optimize: std.builtin.Mode,
+    bpf: *Builder.Module,
+    mounting_step: *Builder.Step,
+    libbpf_step: *std.build.CompileStep,
+};
 
-    // Standard release options allow the person running `zig build` to select
-    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
+pub fn build(b: *Builder) !void {
+    const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     // mount tracefs for structure generation
     const mounting_step = create_mounting_tracefs_step(b);
 
-    // build bpf program
-    const bpf_src = b.option([]const u8, "bpf", "bpf program source path");
-    const prog = create_bpf_prog(b, target, bpf_src);
-    prog.step.dependOn(mounting_step);
-
     // build libbpf
     const libbpf = create_libbpf(b, target, optimize);
+
+    // build bpf package
+    const bpf = b.addModule("bpf", .{
+        .source_file = .{ .path = "src/bpf/root.zig" },
+    });
+
+    const ctx = Ctx{
+        .b = b,
+        .target = target,
+        .optimize = optimize,
+        .bpf = bpf,
+        .mounting_step = mounting_step,
+        .libbpf_step = libbpf,
+    };
+
+    // build bpf program
+    const bpf_src = b.option([]const u8, "bpf", "bpf program source path");
+    const prog = create_bpf_prog(&ctx, bpf_src);
 
     const exe_src = b.option([]const u8, "main", "main executable source path");
     const exe = b.addExecutable(.{
@@ -126,7 +138,6 @@ pub fn build(b: *Builder) !void {
         .target = target,
         .optimize = optimize,
     });
-
     exe.addAnonymousModule("@bpf_prog", .{
         .source_file = prog.getOutputSource(),
     });
@@ -134,29 +145,15 @@ pub fn build(b: *Builder) !void {
     exe.linkLibrary(libbpf);
     exe.linkLibC();
     exe.addIncludePath("external/libbpf/src");
-
     b.installArtifact(exe);
 
-    // This *creates* a RunStep in the build graph, to be executed when another
-    // step is evaluated that depends on it. The next line below will establish
-    // such a dependency.
     const run_cmd = b.addRunArtifact(exe);
-
-    // By making the run step depend on the install step, it will be run from the
-    // installation directory rather than directly from within the cache directory.
-    // This is not necessary, however, if the application depends on other installed
-    // files, this ensures they will be present and in the expected location.
     run_cmd.step.dependOn(b.getInstallStep());
-
     // This allows the user to pass arguments to the application in the build
     // command itself, like this: `zig build run -- arg1 arg2 etc`
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
-
-    // This creates a build step. It will be visible in the `zig build --help` menu,
-    // and can be selected like this: `zig build run`
-    // This will evaluate the `run` step rather than the default, which is "install".
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
@@ -176,18 +173,13 @@ pub fn build(b: *Builder) !void {
     defer sample_dir.close();
     var it = sample_dir.iterate();
     while (try it.next()) |entry| {
-        const bpf_prog = create_bpf_prog(b, target, try fs.path.join(b.allocator, &[_][]const u8{ "samples", entry.name }));
+        const bpf_prog = create_bpf_prog(&ctx, try fs.path.join(b.allocator, &[_][]const u8{ "samples", entry.name }));
         exe_tests.addAnonymousModule(try std.fmt.allocPrint(b.allocator, "@{s}", .{fs.path.stem(entry.name)}), .{
             .source_file = bpf_prog.getOutputSource(),
         });
-        bpf_prog.step.dependOn(mounting_step);
     }
 
-    // Similar to creating the run step earlier, this exposes a `test` step to
-    // the `zig build --help` menu, providing a way for the user to request
-    // running the unit tests.
     const run_test = b.addRunArtifact(exe_tests);
-
     const run_test_step = b.step("test", "Run unit tests");
     run_test_step.dependOn(&run_test.step);
 }
