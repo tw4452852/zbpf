@@ -1,0 +1,10 @@
+.{
+    .name = "zbpf",
+    .version = "0.1.0",
+    .dependencies = .{
+        .libbpf = .{
+            .url = "https://github.com/kassane/libbpf/archive/c4d6edc48c0aa49bc21573781173b7dbd7fae850.tar.gz",
+            .hash = "12207043c8ab30d35d63b7976e8200f4d46b3eeb2213a424877478f8553efab64db0",
+        },
+    },
+}
