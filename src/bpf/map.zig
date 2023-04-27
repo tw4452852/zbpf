@@ -4,6 +4,7 @@ const MapType = std.os.linux.BPF.MapType;
 const kernelMapDef = std.os.linux.BPF.kern.MapDef;
 const StructField = std.builtin.Type.StructField;
 const Declaration = std.builtin.Type.Declaration;
+const vmlinux = @import("vmlinux");
 
 pub const MapUpdateType = enum(u64) {
     any = std.os.linux.BPF.ANY,
@@ -181,7 +182,7 @@ pub fn PerfEventArray(
         }
 
         pub fn event_output(self: Self, ctx: anytype, index: ?u64, data: []u8) !void {
-            const rc = helpers.perf_event_output(ctx, @ptrCast(*const kernelMapDef, &@TypeOf(self.map).def), if (index) |i| i else 0xffffffff, data.ptr, data.len);
+            const rc = helpers.perf_event_output(ctx, @ptrCast(*const kernelMapDef, &@TypeOf(self.map).def), if (index) |i| i else vmlinux.BPF_F_CURRENT_CPU, data.ptr, data.len);
             return switch (rc) {
                 0 => {},
                 else => error.Unknown,
