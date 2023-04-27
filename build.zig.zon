@@ -3,8 +3,8 @@
     .version = "0.1.0",
     .dependencies = .{
         .libbpf = .{
-            .url = "https://github.com/kassane/libbpf/archive/c4d6edc48c0aa49bc21573781173b7dbd7fae850.tar.gz",
-            .hash = "12207043c8ab30d35d63b7976e8200f4d46b3eeb2213a424877478f8553efab64db0",
+            .url = "https://github.com/kassane/libbpf/archive/a3d2eeb0d0388bc390af20d98cfec8660fea6a0f.tar.gz",
+            .hash = "12205e592198e0290f8c4bad66d6b4299e83127e9e4f1dd82b1b7d39577b3a34ea73",
         },
     },
 }

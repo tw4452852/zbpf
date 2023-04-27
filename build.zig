@@ -110,7 +110,6 @@ pub fn build(b: *Builder) !void {
     exe.installLibraryHeaders(libbpf);
     exe.linkLibrary(libbpf);
     exe.linkLibC();
-    exe.addIncludePath("external/libbpf/src");
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
