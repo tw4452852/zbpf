@@ -14,10 +14,11 @@ jobs:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v2
       - run: sudo apt-get install -y libelf-dev libz-dev
-      - run: sudo `which zig` build test
+      - run: zig build test
+      - run: sudo ./zig-out/bin/test
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v2
-      - run: zig fmt --check build.zig src/bpf/*.zig src/tests/*.zig samples/*.zig
+      - run: zig fmt --check build.zig src/bpf/*.zig src/tests/*.zig samples/*.zig src/vmlinux_dumper/*.zig

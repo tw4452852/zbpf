@@ -4,6 +4,7 @@ const MapType = std.os.linux.BPF.MapType;
 const kernelMapDef = std.os.linux.BPF.kern.MapDef;
 const StructField = std.builtin.Type.StructField;
 const Declaration = std.builtin.Type.Declaration;
+const vmlinux = @import("vmlinux");
 
 pub const MapUpdateType = enum(u64) {
     any = std.os.linux.BPF.ANY,
@@ -180,12 +181,58 @@ pub fn PerfEventArray(
             return .{ .map = .{} };
         }
 
-        pub fn event_output(self: Self, ctx: anytype, index: ?u64, data: []u8) !void {
-            const rc = helpers.perf_event_output(ctx, @ptrCast(*const kernelMapDef, &@TypeOf(self.map).def), if (index) |i| i else 0xffffffff, data.ptr, data.len);
+        pub fn event_output(self: *const Self, ctx: anytype, index: ?u64, data: []u8) !void {
+            const rc = helpers.perf_event_output(ctx, @ptrCast(*const kernelMapDef, &@TypeOf(self.map).def), if (index) |i| i else vmlinux.BPF_F_CURRENT_CPU, data.ptr, data.len);
             return switch (rc) {
                 0 => {},
                 else => error.Unknown,
             };
+        }
+    };
+}
+
+pub const RingBufNotify = enum {
+    auto,
+    force_notify,
+    not_notify,
+};
+
+pub fn RingBuffer(
+    comptime name: []const u8,
+    comptime number_of_pages: u32,
+    comptime flags: u32,
+) type {
+    return struct {
+        map: Map(name, .ringbuf, void, void, number_of_pages * 4096, flags),
+
+        const Self = @This();
+
+        pub fn init() Self {
+            return .{ .map = .{} };
+        }
+
+        pub fn event_output(self: *const Self, data: []u8, notify: RingBufNotify) !void {
+            const rc = helpers.ringbuf_output(&@TypeOf(self.map).def, data.ptr, data.len, switch (notify) {
+                .auto => 0,
+                .force_notify => vmlinux.BPF_RB_FORCE_WAKEUP,
+                .not_notify => vmlinux.BPF_RB_NO_WAKEUP,
+            });
+            return switch (rc) {
+                0 => {},
+                else => error.Unknown,
+            };
+        }
+
+        pub fn reserve(self: *const Self, comptime T: type) !struct {
+            data_ptr: *T,
+
+            pub fn commit(s: *const @This()) void {
+                helpers.ringbuf_submit(s.data_ptr, 0);
+            }
+        } {
+            if (helpers.ringbuf_reserve(&@TypeOf(self.map).def, @sizeOf(T), 0)) |ptr| return .{
+                .data_ptr = @ptrCast(*T, ptr),
+            } else return error.Unknown;
         }
     };
 }

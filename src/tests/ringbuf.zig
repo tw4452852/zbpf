@@ -5,8 +5,8 @@ const testing = std.testing;
 const allocator = root.allocator;
 const libbpf = root.libbpf;
 
-test "perf_event" {
-    const obj_bytes = @embedFile("@perf_event");
+test "ringbuf" {
+    const obj_bytes = @embedFile("@ringbuf");
     const bytes = try allocator.dupe(u8, obj_bytes);
     defer allocator.free(bytes);
 
@@ -42,7 +42,7 @@ test "perf_event" {
         };
         defer _ = libbpf.bpf_link__detach(link);
 
-        // setup events perf buffer
+        // setup events ring buffer
         const events = libbpf.bpf_object__find_map_by_name(obj, "events").?;
         var got = std.ArrayList(u8).init(allocator);
         defer got.deinit();
@@ -50,8 +50,8 @@ test "perf_event" {
             .seen = 0,
             .got = &got,
         };
-        const perf_buf = libbpf.perf_buffer__new(libbpf.bpf_map__fd(events), 1, on_sample, null, &ctx, null).?;
-        defer libbpf.perf_buffer__free(perf_buf);
+        const ring_buf = libbpf.ring_buffer__new(libbpf.bpf_map__fd(events), on_sample, &ctx, null).?;
+        defer libbpf.ring_buffer__free(ring_buf);
 
         const expected_count = 3;
         const expected_str = "1" ** expected_count;
@@ -59,9 +59,9 @@ test "perf_event" {
             std.time.sleep(11);
         }
 
-        ret = libbpf.perf_buffer__consume(perf_buf);
-        if (ret != 0) {
-            print("failed consume perf buffer: {}\n", .{std.os.errno(-1)});
+        const n = libbpf.ring_buffer__consume(ring_buf);
+        if (n != expected_count) {
+            print("failed consume ring buffer: return {}, expect {}, err:{}\n", .{ n, expected_count, std.os.errno(-1) });
             return error.PERF_BUF;
         }
 
@@ -75,10 +75,11 @@ const Ctx = extern struct {
     got: *std.ArrayList(u8),
 };
 
-fn on_sample(_ctx: ?*anyopaque, _: c_int, _data: ?*anyopaque, _: u32) callconv(.C) void {
+fn on_sample(_ctx: ?*anyopaque, _data: ?*anyopaque, _: usize) callconv(.C) c_int {
     var ctx = @ptrCast(*Ctx, @alignCast(@alignOf(Ctx), _ctx.?));
     var c = @ptrCast(*const u8, _data.?);
 
     ctx.seen += 1;
     ctx.got.append(c.*) catch unreachable;
+    return 0;
 }

@@ -5,7 +5,7 @@ Write bpf in Zig
 
 - Download the [lastest Zig](https://ziglang.org/download/).
 - Clone this repostory.
-- Build with `sudo zig build -Dbpf=/path/to/your/bpf/prog.zig -Dmain=/path/to/your/main.zig`
+- Build with `zig build -Dbpf=/path/to/your/bpf/prog.zig -Dmain=/path/to/your/main.zig`
 
 That's all! The generated binary is located at `./zig-out/bin/zbpf`.
 

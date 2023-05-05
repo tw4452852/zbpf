@@ -14,4 +14,5 @@ test {
     _ = @import("hash.zig");
     _ = @import("perf_event.zig");
     _ = @import("tracepoint.zig");
+    _ = @import("ringbuf.zig");
 }
