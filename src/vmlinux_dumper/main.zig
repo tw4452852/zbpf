@@ -11,7 +11,7 @@ fn btf_dump_printf(ctx: ?*anyopaque, fmt: [*c]const u8, args: [*c]libbpf.struct_
 }
 
 pub fn main() !void {
-    const btf = libbpf.btf__parse("/sys/kernel/btf/vmlinux", null);
+    const btf = libbpf.btf__load_vmlinux_btf();
     if (btf == null) {
         print("failed to get BTF: {}\n", .{std.os.errno(-1)});
         return error.PARSE;
