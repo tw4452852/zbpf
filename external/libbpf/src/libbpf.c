@@ -2780,6 +2780,20 @@ static int bpf_object__sanitize_btf(struct bpf_object *obj, struct btf *btf)
 				m->offset = 0;
 			}
 		}
+
+#ifdef ZIG_BTF_WA
+		// https://github.com/tw4452852/zbpf/issues/3
+		else if (btf_is_ptr(t)) {
+			t->name_off = 0;
+		} else if (btf_is_fwd(t) || btf_is_struct(t)) {
+			char *name = (char *)btf__name_by_offset(btf, t->name_off);
+			while (*name) {
+				if (*name == '.')
+					*name = '_';
+				name++;
+			}
+		}
+#endif
 	}
 
 	return 0;
@@ -3121,7 +3135,11 @@ static int bpf_object__sanitize_and_load_btf(struct bpf_object *obj)
 	}
 
 	sanitize = btf_needs_sanitization(obj);
+#ifdef ZIG_BTF_WA
+	if (true) {
+#else
 	if (sanitize) {
+#endif
 		const void *raw_data;
 		__u32 sz;
 

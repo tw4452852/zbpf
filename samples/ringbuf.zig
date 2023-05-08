@@ -8,7 +8,7 @@ var my_pid = bpf.Map.ArrayMap("my_pid", u32, 1, 0).init();
 
 var n: u32 = 0;
 
-export fn test_ringbuf(_: *opaque {}) linksection("kprobe/do_nanosleep") c_int {
+export fn test_ringbuf() linksection("kprobe/do_nanosleep") c_int {
     const pid = my_pid.lookup(0) orelse return 1;
 
     const cur_pid = @truncate(u32, helpers.get_current_pid_tgid());

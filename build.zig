@@ -62,6 +62,7 @@ fn create_libbpf(b: *Builder, target: std.zig.CrossTarget, optimize: std.builtin
     const libbpfFlags = [_][]const u8{
         "-D_LARGEFILE64_SOURCE",
         "-D_FILE_OFFSET_BITS=64",
+        "-DZIG_BTF_WA",
     };
     libbpf.addCSourceFiles(&libbpfSources, &libbpfFlags);
     libbpf.addIncludePath("external/libbpf/include");
