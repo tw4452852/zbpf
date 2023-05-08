@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 const fs = std.fs;
 const Builder = std.build.Builder;
 
-const debugging = true;
+const debugging = false;
 
 fn create_bpf_prog(ctx: *const Ctx, src_path: ?[]const u8) *std.build.CompileStep {
     const name = fs.path.stem(src_path orelse "?");
@@ -202,6 +202,11 @@ pub fn build(b: *Builder) !void {
             .source_file = bpf_prog.getOutputSource(),
         });
     }
+
+    // add debug option to test
+    const tests_options = b.addOptions();
+    exe_tests.addOptions("build_options", tests_options);
+    tests_options.addOption(bool, "debug", debugging);
 
     const run_test_step = b.step("test", "Build unit tests");
     run_test_step.dependOn(&install_test.step);

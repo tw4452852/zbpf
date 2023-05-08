@@ -27,7 +27,6 @@ test "hash" {
 
     if (libbpf.bpf_object__next_program(obj, null)) |prog| {
         var map = libbpf.bpf_object__next_map(obj, null).?;
-        print("find prog: {s}, map: {s}\n", .{ libbpf.bpf_program__name(prog), libbpf.bpf_map__name(map) });
 
         // map[0] = 1
         var k: u32 = 0;

@@ -19,11 +19,6 @@ test "array" {
     }
     defer libbpf.bpf_object__close(obj);
 
-    var _map = libbpf.bpf_object__next_map(obj, null);
-    while (_map) |map| : (_map = libbpf.bpf_object__next_map(obj, _map)) {
-        print("find map: {s}\n", .{libbpf.bpf_map__name(map)});
-    }
-
     var ret = libbpf.bpf_object__load(obj);
     if (ret != 0) {
         print("failed to load bpf object: {}\n", .{std.os.errno(-1)});
@@ -32,7 +27,6 @@ test "array" {
 
     if (libbpf.bpf_object__next_program(obj, null)) |prog| {
         var map = libbpf.bpf_object__next_map(obj, null).?;
-        print("find prog: {s}, map: {s}\n", .{ libbpf.bpf_program__name(prog), libbpf.bpf_map__name(map) });
 
         // map[0] = 1
         var k: u32 = 0;

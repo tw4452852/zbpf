@@ -4,8 +4,11 @@ pub const libbpf = @cImport({
     @cInclude("libbpf.h");
     @cInclude("bpf.h");
 });
+const build_options = @import("build_options");
 
-pub fn dbg_printf(_: libbpf.libbpf_print_level, fmt: [*c]const u8, args: [*c]libbpf.__va_list_tag) callconv(.C) c_int {
+pub fn dbg_printf(level: libbpf.libbpf_print_level, fmt: [*c]const u8, args: [*c]libbpf.__va_list_tag) callconv(.C) c_int {
+    if (!build_options.debug and level == libbpf.LIBBPF_DEBUG) return 0;
+
     return libbpf.vdprintf(std.io.getStdErr().handle, fmt, args);
 }
 
