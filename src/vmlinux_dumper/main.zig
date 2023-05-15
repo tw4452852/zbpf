@@ -17,7 +17,9 @@ pub fn main() !void {
         return error.PARSE;
     }
 
-    const d = libbpf.btf_dump__new(btf, btf_dump_printf, @intToPtr(?*anyopaque, @intCast(usize, std.io.getStdOut().handle)), null);
+    const stdout = std.io.getStdOut();
+
+    const d = libbpf.btf_dump__new(btf, btf_dump_printf, @intToPtr(?*anyopaque, @intCast(usize, stdout.handle)), null);
     if (d == null) {
         print("failed to create btf dumper: {}\n", .{std.os.errno(-1)});
         return error.DUMP;
@@ -30,6 +32,28 @@ pub fn main() !void {
         if (err != 0) {
             print("failed to dump {}th btf type: {}\n", .{ i, std.os.errno(-1) });
             return error.DUMP;
+        }
+    }
+
+    for (0..n) |i| {
+        const t = libbpf.btf__type_by_id(btf, @intCast(c_uint, i));
+        if (libbpf.btf_kind(t) == libbpf.BTF_KIND_FUNC) {
+            const OPT = extern struct {
+                sz: usize,
+                field_name: [*c]const u8,
+                indent_level: c_int = 0,
+                strip_mods: bool = false,
+            };
+            var opt: OPT = .{
+                .sz = @sizeOf(OPT),
+                .field_name = libbpf.btf__name_by_offset(btf, t[0].name_off),
+            };
+            const err = libbpf.btf_dump__emit_type_decl(d, t[0].unnamed_0.type, @ptrCast(*libbpf.btf_dump_emit_type_decl_opts, &opt));
+            if (err != 0) {
+                print("failed to dump {}th btf type: {}\n", .{ i, std.os.errno(-1) });
+                return error.DUMP;
+            }
+            try std.fmt.format(stdout, ";\n", .{});
         }
     }
 }
