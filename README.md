@@ -9,8 +9,12 @@ Write bpf in Zig
 
 That's all! The generated binary is located at `./zig-out/bin/zbpf`.
 
-There are some bpf program samples under `samples` directory for reference,
-and for userspace program, you could check tests under `src/tests`.
+## Samples
+
+For each supported feature, we have the corresponding unit test to cover it.
+You could find them under `samples/` (BPF side) and `src/tests` (host side).
+For example, for array map feature, they are `samples/array.zig` and `src/tests/array.zig`.
+You could build it with `zig build test -Dtest=xxx` and run it with `sudo zig-out/bin/test`.
 
 Have fun!
 
