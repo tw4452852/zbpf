@@ -18,4 +18,5 @@ test {
     _ = @import("perf_event.zig");
     _ = @import("tracepoint.zig");
     _ = @import("ringbuf.zig");
+    _ = @import("iterator.zig");
 }
