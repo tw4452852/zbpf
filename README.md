@@ -14,5 +14,18 @@ and for userspace program, you could check tests under `src/tests`.
 
 Have fun!
 
+## Support
 
+### Map type
 
+- [x] Array
+- [x] Hashmap
+- [x] Perf event array
+- [x] Ring buffer
+
+### Program type
+
+- [x] tracepoint
+- [x] fentry/fexit
+- [x] xdp
+- [x] iterator
