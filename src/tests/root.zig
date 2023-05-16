@@ -19,4 +19,5 @@ test {
     _ = @import("tracepoint.zig");
     _ = @import("ringbuf.zig");
     _ = @import("iterator.zig");
+    _ = @import("fentry.zig");
 }
