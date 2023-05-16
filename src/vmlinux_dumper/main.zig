@@ -38,6 +38,8 @@ pub fn main() !void {
     for (0..n) |i| {
         const t = libbpf.btf__type_by_id(btf, @intCast(c_uint, i));
         if (libbpf.btf_kind(t) == libbpf.BTF_KIND_FUNC) {
+            var buf: [256]u8 = undefined;
+            const func_name = try std.fmt.bufPrintZ(&buf, "_zig_{s}", .{libbpf.btf__name_by_offset(btf, t[0].name_off)});
             const OPT = extern struct {
                 sz: usize,
                 field_name: [*c]const u8,
@@ -46,7 +48,7 @@ pub fn main() !void {
             };
             var opt: OPT = .{
                 .sz = @sizeOf(OPT),
-                .field_name = libbpf.btf__name_by_offset(btf, t[0].name_off),
+                .field_name = func_name,
             };
             const err = libbpf.btf_dump__emit_type_decl(d, t[0].unnamed_0.type, @ptrCast(*libbpf.btf_dump_emit_type_decl_opts, &opt));
             if (err != 0) {

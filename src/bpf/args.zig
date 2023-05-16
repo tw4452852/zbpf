@@ -2,8 +2,8 @@ const vmlinux = @import("vmlinux");
 const std = @import("std");
 const StructField = std.builtin.Type.StructField;
 
-pub fn Ctx(comptime name: []const u8) type {
-    const f = @typeInfo(@TypeOf(@field(vmlinux, name)));
+pub fn Ctx(comptime func_name: []const u8) type {
+    const f = @typeInfo(@TypeOf(@field(vmlinux, "_zig_" ++ func_name)));
     comptime var fields: []const StructField = &.{};
 
     for (0.., f.Fn.params) |i, arg| {
