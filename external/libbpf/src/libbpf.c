@@ -2788,7 +2788,7 @@ static int bpf_object__sanitize_btf(struct bpf_object *obj, struct btf *btf)
 		} else if (btf_is_fwd(t) || btf_is_struct(t)) {
 			char *name = (char *)btf__name_by_offset(btf, t->name_off);
 			while (*name) {
-				if (*name == '.')
+				if (!isalpha(*name))
 					*name = '_';
 				name++;
 			}
