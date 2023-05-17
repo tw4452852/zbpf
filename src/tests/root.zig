@@ -20,4 +20,5 @@ test {
     _ = @import("ringbuf.zig");
     _ = @import("iterator.zig");
     _ = @import("fentry.zig");
+    _ = @import("kprobe.zig");
 }

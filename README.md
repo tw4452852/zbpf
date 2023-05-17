@@ -33,3 +33,4 @@ Have fun!
 - [x] fentry/fexit
 - [x] xdp
 - [x] iterator
+- [x] kprobe/kretprobe
