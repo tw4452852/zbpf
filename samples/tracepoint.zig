@@ -10,7 +10,7 @@ const tp = bpf.Tracepoint{
     .name = "sched_switch",
 };
 
-export fn tracepoint(ctx: *tp.Ctx()) linksection(tp.section()) callconv(.C) c_int {
+export fn test_tracepoint(ctx: *tp.Ctx()) linksection(tp.section()) callconv(.C) c_int {
     n += ctx.prev_pid;
     count.update(.any, 0, n) catch return 1;
     return 0;
