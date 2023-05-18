@@ -5,7 +5,7 @@ pub const libbpf = @cImport({
     @cInclude("btf.h");
 });
 
-fn btf_dump_printf(ctx: ?*anyopaque, fmt: [*c]const u8, args: [*c]libbpf.struct___va_list_tag) callconv(.C) void {
+fn btf_dump_printf(ctx: ?*anyopaque, fmt: [*c]const u8, args: @typeInfo(@typeInfo(@typeInfo(libbpf.btf_dump_printf_fn_t).Optional.child).Pointer.child).Fn.params[2].type.?) callconv(.C) void {
     const fd = @ptrToInt(ctx);
     _ = libbpf.vdprintf(@intCast(c_int, fd), fmt, args);
 }
