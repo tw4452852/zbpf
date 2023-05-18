@@ -40,7 +40,7 @@ test "perf_event" {
             print("failed to attach prog {s}: {}\n", .{ libbpf.bpf_program__name(prog), std.os.errno(-1) });
             return error.ATTACH;
         };
-        defer _ = libbpf.bpf_link__detach(link);
+        defer _ = libbpf.bpf_link__destroy(link);
 
         // setup events perf buffer
         const events = libbpf.bpf_object__find_map_by_name(obj, "events").?;

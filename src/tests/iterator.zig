@@ -27,8 +27,11 @@ test "iterator" {
 
     if (libbpf.bpf_object__next_program(obj, null)) |prog| {
         const link = libbpf.bpf_program__attach_iter(prog, null).?;
+        defer _ = libbpf.bpf_link__destroy(link);
         const fd = libbpf.bpf_iter_create(libbpf.bpf_link__fd(link));
-        var r = (std.fs.File{ .handle = fd }).reader();
+        const f = std.fs.File{ .handle = fd };
+        defer f.close();
+        var r = f.reader();
 
         const expect = blk: {
             var n: u64 = 0;

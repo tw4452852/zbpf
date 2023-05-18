@@ -32,7 +32,7 @@ test "tracepoint" {
             print("failed to attach prog {s}: {}\n", .{ libbpf.bpf_program__name(prog), std.os.errno(-1) });
             return error.ATTACH;
         };
-        defer _ = libbpf.bpf_link__detach(link);
+        defer _ = libbpf.bpf_link__destroy(link);
 
         std.time.sleep(10);
 
