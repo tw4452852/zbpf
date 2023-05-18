@@ -13,6 +13,7 @@ pub fn dbg_printf(level: libbpf.libbpf_print_level, fmt: [*c]const u8, args: @ty
 }
 
 test {
+    _ = @import("trace_printk.zig");
     _ = @import("array.zig");
     _ = @import("hash.zig");
     _ = @import("perf_event.zig");
