@@ -40,7 +40,7 @@ pub fn Ctx(comptime func_name: []const u8) type {
 
 pub fn PT_REGS(comptime func_name: []const u8) type {
     const f = @typeInfo(@TypeOf(@field(vmlinux, "_zig_" ++ func_name)));
-    const S = if (@hasField(vmlinux, "user_pt_regs")) vmlinux.user_pt_regs else vmlinux.pt_regs;
+    const S = if (@hasDecl(vmlinux, "user_pt_regs")) vmlinux.user_pt_regs else vmlinux.pt_regs;
 
     return opaque {
         const Self = @This();
@@ -59,7 +59,7 @@ pub fn PT_REGS(comptime func_name: []const u8) type {
                 else if (@hasField(S, "regs"))
                     pt.regs[0]
                 else
-                    @compileError(std.fmt.comptimeFormat("{any}: can't determine arg0's type: {any}", .{ f, S }));
+                    @compileError(std.fmt.comptimePrint("{s}: can't determine arg0 {any}'s type from {any}", .{ func_name, @typeInfo(f.Fn.params[0].type.?), @typeInfo(S).Struct.fields }));
             }
         };
 
@@ -77,7 +77,7 @@ pub fn PT_REGS(comptime func_name: []const u8) type {
                 else if (@hasField(S, "regs"))
                     pt.regs[1]
                 else
-                    @compileError(std.fmt.comptimeFormat("{any}: can't determine arg1's type: {any}", .{ f, S }));
+                    @compileError(std.fmt.comptimePrint("{s}: can't determine arg1 {any}'s type from {any}", .{ func_name, @typeInfo(f.Fn.params[1].type.?), @typeInfo(S).Struct.fields }));
             }
         };
 
@@ -95,7 +95,7 @@ pub fn PT_REGS(comptime func_name: []const u8) type {
                 else if (@hasField(S, "regs"))
                     pt.regs[2]
                 else
-                    @compileError(std.fmt.comptimeFormat("{any}: can't determine arg2's type: {any}", .{ f, S }));
+                    @compileError(std.fmt.comptimePrint("{s}: can't determine arg2 {any}'s type from {s}", .{ func_name, @typeInfo(f.Fn.params[2].type.?), @typeInfo(S).Struct.fields }));
             }
         };
 
@@ -111,7 +111,7 @@ pub fn PT_REGS(comptime func_name: []const u8) type {
                 else if (@hasField(S, "regs"))
                     pt.regs[3]
                 else
-                    @compileError(std.fmt.comptimeFormat("{any}: can't determine arg3's type: {any}", .{ f, S }));
+                    @compileError(std.fmt.comptimePrint("{s}: can't determine arg3 {any}'s type from {any}", .{ func_name, @typeInfo(f.Fn.params[3].type.?), @typeInfo(S).Struct.fields }));
             }
         };
 
@@ -125,7 +125,7 @@ pub fn PT_REGS(comptime func_name: []const u8) type {
                 else if (@hasField(S, "regs"))
                     pt.regs[4]
                 else
-                    @compileError(std.fmt.comptimeFormat("{any}: can't determine arg4's type: {any}", .{ f, S }));
+                    @compileError(std.fmt.comptimePrint("{s}: can't determine arg4 {any}'s type from {any}", .{ func_name, @typeInfo(f.Fn.params[4].type.?), @typeInfo(S).Struct.fields }));
             }
         };
 
@@ -146,7 +146,7 @@ pub fn PT_REGS(comptime func_name: []const u8) type {
                 else if (@hasField(S, "regs"))
                     if (!is_pointer) @intCast(RET, pt.regs[0]) else pt.regs[0]
                 else
-                    @compileError(std.fmt.comptimeFormat("{any}: can't determine return type: {any}", .{ f, S }));
+                    @compileError(std.fmt.comptimePrint("{s}: can't determine return {any}'s type from {any}", .{ func_name, ti, @typeInfo(S).Struct.fields }));
             }
         };
     };
