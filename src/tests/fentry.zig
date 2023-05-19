@@ -32,7 +32,11 @@ test "fentry" {
     const rc = libbpf.bpf_object__find_map_by_name(obj, "exit").?;
 
     const entry_link = libbpf.bpf_program__attach(entry_prog) orelse {
-        print("failed to attach entry_prog {s}: {}\n", .{ libbpf.bpf_program__name(entry_prog), std.os.errno(-1) });
+        const errno = std.os.errno(-1);
+        print("failed to attach entry_prog {s}: {}\n", .{ libbpf.bpf_program__name(entry_prog), errno });
+
+        const ENOTSUPP = 524;
+        if (@enumToInt(errno) == ENOTSUPP) return error.SkipZigTest;
         return error.ATTACH;
     };
     defer _ = libbpf.bpf_link__destroy(entry_link);
