@@ -1,5 +1,5 @@
 # zbpf
-Write bpf in Zig.
+Writing eBPF in Zig.
 
 ## Prerequisite
 
