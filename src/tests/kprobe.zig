@@ -35,12 +35,12 @@ test "kprobe" {
         print("failed to attach entry_prog {s}: {}\n", .{ libbpf.bpf_program__name(entry_prog), std.os.errno(-1) });
         return error.ATTACH;
     };
-    defer _ = libbpf.bpf_link__detach(entry_link);
+    defer _ = libbpf.bpf_link__destroy(entry_link);
     const exit_link = libbpf.bpf_program__attach(exit_prog) orelse {
         print("failed to attach prog {s}: {}\n", .{ libbpf.bpf_program__name(exit_prog), std.os.errno(-1) });
         return error.ATTACH;
     };
-    defer _ = libbpf.bpf_link__detach(exit_link);
+    defer _ = libbpf.bpf_link__destroy(exit_link);
 
     var buf: [64]u8 = undefined;
     const n = std.os.linux.listxattr("/nonexist", &buf, buf.len);
