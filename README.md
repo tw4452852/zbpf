@@ -32,5 +32,6 @@ tracepoint | [source](samples/tracepoint.zig) | [source](src/tests/tracepoint.zi
 iterator | [source](samples/iterator.zig) | [source](src/tests/iterator.zig)
 fentry | [source](samples/fentry.zig) | [source](src/tests/fentry.zig)
 kprobe | [source](samples/kprobe.zig) | [source](src/tests/kprobe.zig)
+kmulprobe | [source](samples/kmulprobe.zig) | [source](src/tests/kmulprobe.zig)
 
 **Have fun!**
