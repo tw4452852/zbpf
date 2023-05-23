@@ -95,10 +95,10 @@ const REGS = opaque {
         };
     }
 
-    pub fn arg3_ptr(self: *Self) *c_ulong {
+    pub fn arg3_ptr(self: *Self, for_syscall: bool) *c_ulong {
         const s = @ptrCast(*S, @alignCast(@alignOf(S), self));
         return switch (arch) {
-            .x86_64 => &s.cx,
+            .x86_64 => if (for_syscall) &s.r10 else &s.cx,
             .x86 => @compileError(std.fmt.comptimePrint("not support arg3 on i386", .{})),
             .arm => &s.uregs[3],
             .aarch64 => &s.regs[3],
@@ -155,7 +155,7 @@ pub fn PT_REGS(comptime func_name: []const u8) type {
 
         pub usingnamespace if (f.Fn.params.len < 4) struct {} else struct {
             pub fn arg3(self: *Self) f.Fn.params[3].type.? {
-                return @ptrCast(*REGS, self).arg3_ptr().*;
+                return @ptrCast(*REGS, self).arg3_ptr(false).*;
             }
         };
 
@@ -223,9 +223,9 @@ pub fn SYSCALL(comptime name: []const u8) type {
             if (LINUX_HAS_SYSCALL_WRAPPER) {
                 const ctx = @intToPtr(*REGS, @ptrCast(*REGS, self).arg0_ptr().*);
                 var d: c_ulong = undefined;
-                const r = helpers.probe_read_kernel(&d, @sizeOf(c_ulong), ctx.arg3_ptr());
+                const r = helpers.probe_read_kernel(&d, @sizeOf(c_ulong), ctx.arg3_ptr(true));
                 return if (r != 0) error.READ_KERN else d;
-            } else return @ptrCast(*REGS, self).arg3_ptr().*;
+            } else return @ptrCast(*REGS, self).arg3_ptr(true).*;
         }
 
         pub fn arg4(self: *Self) !c_ulong {

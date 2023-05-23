@@ -276,6 +276,7 @@ fn create_vmlinux(b: *Builder) *Builder.Module {
     exe.linkLibrary(libbpf);
     exe.linkLibC();
     exe.addIncludePath("external/libbpf/src");
+    b.installArtifact(exe);
 
     const run_exe = b.addRunArtifact(exe);
     const vmlinux_bin = b.option([]const u8, "vmlinux", "vmlinux binary used for BTF generation");
