@@ -106,6 +106,8 @@ fn create_vmlinux(b: *Builder, target: std.zig.CrossTarget, optimize: std.builti
     exe.addIncludePath("external/libbpf/src");
 
     const run_exe = b.addRunArtifact(exe);
+    const vmlinux_bin = b.option([]const u8, "vmlinux", "vmlinux binary used for BTF generation");
+    if (vmlinux_bin) |vmlinux| run_exe.addArg(vmlinux);
     const stdout = run_exe.captureStdOut();
     const vmlinux_h = b.addInstallFile(stdout, "vmlinux.h");
     const zigify = b.addTranslateC(.{

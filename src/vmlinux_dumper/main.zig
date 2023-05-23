@@ -10,8 +10,11 @@ fn btf_dump_printf(ctx: ?*anyopaque, fmt: [*c]const u8, args: @typeInfo(@typeInf
     _ = libbpf.vdprintf(@intCast(c_int, fd), fmt, args);
 }
 
+// vmlinux_dumper [path_to_vmlinux]
 pub fn main() !void {
-    const btf = libbpf.btf__load_vmlinux_btf();
+    var it = std.process.args();
+    _ = it.skip(); // skip process name
+    const btf = if (it.next()) |vmlinux| libbpf.btf__parse(vmlinux, null) else libbpf.btf__load_vmlinux_btf();
     if (btf == null) {
         print("failed to get BTF: {}\n", .{std.os.errno(-1)});
         return error.PARSE;
