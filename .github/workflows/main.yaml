@@ -13,7 +13,6 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v2
-      - run: sudo apt-get install -y libelf-dev libz-dev
       - run: uname -a
       - run: zig build test
       - run: sudo ./zig-out/bin/test

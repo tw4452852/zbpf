@@ -1,0 +1,43 @@
+Freestanding libelf
+===================
+
+This package contains an up-to-date and complete libelf extracted from
+elfutils, along with a simple Makefile to build and install it.
+
+Unlike the upstream package, this libelf builds cleanly on both musl and
+glibc, using either clang or gcc. Users are spared the joy of autotools,
+and on musl systems it does not require extra libraries for argp, fts or
+obstack. The sole dependency is zlib for handling compressed ELF sections.
+
+The elfutils tools, libdwarf and libasm are not included: you will need the
+full upstream distribution to build those. However, they are a much more
+unusual requirement than libelf itself. (For instance, this library alone
+is sufficient for building an x86-64 Linux kernel with stack validation.)
+
+
+Building and installing
+-----------------------
+
+Unpack the source tar.gz file and change to the unpacked directory.
+
+Run 'make' then 'make install' to install the libelf headers in /include,
+plus static and shared libraries in /lib. You can customise DESTDIR,
+PREFIX, LIBDIR and/or INCDIR to install in different locations. An
+install-static target is available to install only a static library, and
+similarly the install-shared target installs only the shared library.
+
+The build should work out of the box on reasonably recent musl/glibc and
+clang/gcc. On very old or non-Linux systems, some manual adjustment of
+src/config.h may be needed.
+
+Please report any problems or bugs to Chris Webb <chris@arachsys.com> rather
+than to the upstream elfutils maintainers, who are not to blame for issues
+in this repackaging of libelf.
+
+
+Copying
+-------
+
+This software is distributed under the terms of the GNU GPL version 2 or
+later, as included in COPYING-GPLV2, or the GNU LGPL version 3 or later, as
+included in COPYING-LGPLV3.

@@ -3,23 +3,29 @@ Writing eBPF in Zig.
 
 ## Prerequisite
 
-- Make sure `CONFIG_DEBUG_INFO_BTF=y`.
-- The only runtime libraries (beyond `libc`) is `libelf` and `zlib`,
-you'll also need development versions of them (for API headers) to compile.
+- Make sure the linux kernel is built with `CONFIG_DEBUG_INFO_BTF=y`.
+- The only runtime library is `libc` (this is not even necessary if you build with musl-libc).
 
 ## How to use
 
 - Download the [lastest Zig](https://ziglang.org/download/).
 - Clone this repostory.
-- Build with `zig build -Dbpf=/path/to/your/bpf/prog.zig -Dmain=/path/to/your/main.zig`
+- Build with `zig build -Dbpf=/path/to/your/bpf/prog.zig -Dmain=/path/to/your/main.zig`.
 
-That's all! The generated binary is located at `./zig-out/bin/zbpf`.
+For cross-compiling, you could specify the target with `-Dtarget=<target>`,
+the list of all supported targets could be retrieved by `zig targets`.
+
+Moreover, you could specify the target kernel with `-Dvmlinux=/path/to/vmlinux`
+to extract BTF from it, otherwise, current kernel's BTF will be used.
+
+That's all! The generated binary is located at `./zig-out/bin/zbpf`,
+feel free to run it on your target machine.
 
 ## Samples
 
 For each supported feature, we have the corresponding unit test.
 You could find them under `samples/` (BPF side) and `src/tests` (Host side).
-You could build it with `zig build test -Dtest=<name>` and run it with `sudo zig-out/bin/test`.
+Build it with `zig build test -Dtest=<name>` and run it with `sudo zig-out/bin/test`.
 
 Name | BPF side | Host side
 --- | --- | ---
