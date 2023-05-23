@@ -32,4 +32,5 @@ test {
     _ = @import("fentry.zig");
     _ = @import("kprobe.zig");
     _ = @import("kmulprobe.zig");
+    _ = @import("ksyscall.zig");
 }
