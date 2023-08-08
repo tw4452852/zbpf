@@ -23,10 +23,10 @@ fn Map(
     const fields = [_]StructField{
         .{
             .name = "type",
-            .type = ?*[@enumToInt(map_type)]u8,
+            .type = ?*[@intFromEnum(map_type)]u8,
             .default_value = null,
             .is_comptime = false,
-            .alignment = @alignOf(?*[@enumToInt(map_type)]u8),
+            .alignment = @alignOf(?*[@intFromEnum(map_type)]u8),
         },
         .{
             .name = "key",
@@ -75,7 +75,7 @@ fn Map(
 
         /// Perform a lookup in *map* for an entry associated to *key*.
         pub fn lookup(_: *const Self, key: Key) ?*Value {
-            return @ptrCast(?*Value, @alignCast(@alignOf(?*Value), helpers.map_lookup_elem(@ptrCast(*const kernelMapDef, &Self.def), &key)));
+            return @ptrCast(@alignCast(helpers.map_lookup_elem(@ptrCast(&Self.def), &key)));
         }
 
         /// Add or update the value of the entry associated to `key` in `map`
@@ -90,10 +90,10 @@ fn Map(
         /// always exist), the helper would return an error.
         pub fn update(_: *const Self, update_type: MapUpdateType, key: Key, value: Value) !void {
             const rc = helpers.map_update_elem(
-                @ptrCast(*const kernelMapDef, &Self.def),
+                @ptrCast(&Self.def),
                 &key,
                 &value,
-                @enumToInt(update_type),
+                @intFromEnum(update_type),
             );
             return switch (rc) {
                 0 => {},
@@ -103,7 +103,7 @@ fn Map(
 
         /// Delete entry with *key* from *map*.
         pub fn delete(_: *const Self, key: Key) !void {
-            const rc = helpers.map_delete_elem(@ptrCast(*const kernelMapDef, &Self.def), &key);
+            const rc = helpers.map_delete_elem(@ptrCast(&Self.def), &key);
             return switch (rc) {
                 0 => {},
                 else => error.Unknown,
@@ -182,7 +182,7 @@ pub fn PerfEventArray(
         }
 
         pub fn event_output(self: *const Self, ctx: anytype, index: ?u64, data: []u8) !void {
-            const rc = helpers.perf_event_output(ctx, @ptrCast(*const kernelMapDef, &@TypeOf(self.map).def), if (index) |i| i else vmlinux.BPF_F_CURRENT_CPU, data.ptr, data.len);
+            const rc = helpers.perf_event_output(ctx, @ptrCast(&@TypeOf(self.map).def), if (index) |i| i else vmlinux.BPF_F_CURRENT_CPU, data.ptr, data.len);
             return switch (rc) {
                 0 => {},
                 else => error.Unknown,
@@ -231,7 +231,7 @@ pub fn RingBuffer(
             }
         } {
             if (helpers.ringbuf_reserve(&@TypeOf(self.map).def, @sizeOf(T), 0)) |ptr| return .{
-                .data_ptr = @ptrCast(*T, ptr),
+                .data_ptr = @ptrCast(ptr),
             } else return error.Unknown;
         }
     };

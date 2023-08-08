@@ -10,7 +10,7 @@ const Meta = extern struct {
     const Self = @This();
 
     pub fn write(self: *Self, data: []const u8) !void {
-        const rc = helpers.seq_write(self.seq, @ptrCast(*const u8, data), @intCast(u32, data.len));
+        const rc = helpers.seq_write(self.seq, @ptrCast(data), @intCast(data.len));
         return switch (rc) {
             0 => {},
             else => error.Unknown,

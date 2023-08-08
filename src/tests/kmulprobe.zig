@@ -50,12 +50,12 @@ test "kmulprobe" {
         .cnt = syms.len,
         .retprobe = false,
     };
-    const entry_link = libbpf.bpf_program__attach_kprobe_multi_opts(entry_prog, null, @ptrCast(*const libbpf.bpf_kprobe_multi_opts, &opt)) orelse {
+    const entry_link = libbpf.bpf_program__attach_kprobe_multi_opts(entry_prog, null, @ptrCast(&opt)) orelse {
         print("failed to attach entry_prog {s}: {}\n", .{ libbpf.bpf_program__name(entry_prog), std.os.errno(-1) });
         return error.ATTACH;
     };
     defer _ = libbpf.bpf_link__destroy(entry_link);
-    const exit_link = libbpf.bpf_program__attach_kprobe_multi_opts(exit_prog, null, @ptrCast(*const libbpf.bpf_kprobe_multi_opts, &opt)) orelse {
+    const exit_link = libbpf.bpf_program__attach_kprobe_multi_opts(exit_prog, null, @ptrCast(&opt)) orelse {
         print("failed to attach prog {s}: {}\n", .{ libbpf.bpf_program__name(exit_prog), std.os.errno(-1) });
         return error.ATTACH;
     };

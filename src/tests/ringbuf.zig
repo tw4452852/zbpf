@@ -65,7 +65,7 @@ test "ringbuf" {
             return error.PERF_BUF;
         }
 
-        try testing.expectEqual(@intCast(@TypeOf(ctx.seen), expected_count), ctx.seen);
+        try testing.expectEqual(@as(@TypeOf(ctx.seen), @intCast(expected_count)), ctx.seen);
         try testing.expectEqualStrings(expected_str, got.items);
     }
 }
@@ -76,8 +76,8 @@ const Ctx = extern struct {
 };
 
 fn on_sample(_ctx: ?*anyopaque, _data: ?*anyopaque, _: usize) callconv(.C) c_int {
-    var ctx = @ptrCast(*Ctx, @alignCast(@alignOf(Ctx), _ctx.?));
-    var c = @ptrCast(*const u8, _data.?);
+    var ctx: *Ctx = @ptrCast(@alignCast(_ctx.?));
+    var c: *const u8 = @ptrCast(_data.?);
 
     ctx.seen += 1;
     ctx.got.append(c.*) catch unreachable;

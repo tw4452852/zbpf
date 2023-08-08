@@ -6,8 +6,8 @@ pub const libbpf = @cImport({
 });
 
 fn btf_dump_printf(ctx: ?*anyopaque, fmt: [*c]const u8, args: @typeInfo(@typeInfo(@typeInfo(libbpf.btf_dump_printf_fn_t).Optional.child).Pointer.child).Fn.params[2].type.?) callconv(.C) void {
-    const fd = @ptrToInt(ctx);
-    _ = libbpf.vdprintf(@intCast(c_int, fd), fmt, args);
+    const fd = @intFromPtr(ctx);
+    _ = libbpf.vdprintf(@intCast(fd), fmt, args);
 }
 
 // vmlinux_dumper [path_to_vmlinux]
@@ -22,7 +22,7 @@ pub fn main() !void {
 
     const stdout = std.io.getStdOut();
 
-    const d = libbpf.btf_dump__new(btf, btf_dump_printf, @intToPtr(?*anyopaque, @intCast(usize, stdout.handle)), null);
+    const d = libbpf.btf_dump__new(btf, btf_dump_printf, @ptrFromInt(@as(usize, @intCast(stdout.handle))), null);
     if (d == null) {
         print("failed to create btf dumper: {}\n", .{std.os.errno(-1)});
         return error.DUMP;
@@ -31,7 +31,7 @@ pub fn main() !void {
 
     const n = libbpf.btf__type_cnt(btf);
     for (0..n) |i| {
-        const err = libbpf.btf_dump__dump_type(d, @intCast(c_uint, i));
+        const err = libbpf.btf_dump__dump_type(d, @intCast(i));
         if (err != 0) {
             print("failed to dump {}th btf type: {}\n", .{ i, std.os.errno(-1) });
             return error.DUMP;
@@ -39,7 +39,7 @@ pub fn main() !void {
     }
 
     for (0..n) |i| {
-        const t = libbpf.btf__type_by_id(btf, @intCast(c_uint, i));
+        const t = libbpf.btf__type_by_id(btf, @intCast(i));
         if (libbpf.btf_kind(t) == libbpf.BTF_KIND_FUNC) {
             var buf: [256]u8 = undefined;
             const func_name = try std.fmt.bufPrintZ(&buf, "_zig_{s}", .{libbpf.btf__name_by_offset(btf, t[0].name_off)});
@@ -53,7 +53,7 @@ pub fn main() !void {
                 .sz = @sizeOf(OPT),
                 .field_name = func_name,
             };
-            const err = libbpf.btf_dump__emit_type_decl(d, t[0].unnamed_0.type, @ptrCast(*libbpf.btf_dump_emit_type_decl_opts, &opt));
+            const err = libbpf.btf_dump__emit_type_decl(d, t[0].unnamed_0.type, @ptrCast(&opt));
             if (err != 0) {
                 print("failed to dump {}th btf type: {}\n", .{ i, std.os.errno(-1) });
                 return error.DUMP;

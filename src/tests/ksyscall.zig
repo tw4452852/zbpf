@@ -66,6 +66,6 @@ test "ksyscall" {
         return error.MAP_LOOKUP;
     }
 
-    try testing.expectEqual(@ptrToInt(arg0.ptr) + @ptrToInt(arg1.ptr) + @ptrToInt(&buf) + buf.len, got_entry);
-    try testing.expectEqual(@bitCast(isize, n), got_exit);
+    try testing.expectEqual(@intFromPtr(arg0.ptr) + @intFromPtr(arg1.ptr) + @intFromPtr(&buf) + buf.len, got_entry);
+    try testing.expectEqual(@as(isize, @bitCast(n)), got_exit);
 }

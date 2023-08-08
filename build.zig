@@ -190,9 +190,9 @@ fn create_libelf(b: *Builder, target: std.zig.CrossTarget, optimize: std.builtin
         "external/libelf/src/nlist.c",
     }, &.{"-DHAVE_CONFIG_H"});
 
-    lib.addIncludePath("external/libelf/include");
-    lib.addIncludePath("external/libelf/src");
-    lib.addIncludePath("external/libz");
+    lib.addIncludePath(.{ .path = "external/libelf/include" });
+    lib.addIncludePath(.{ .path = "external/libelf/src" });
+    lib.addIncludePath(.{ .path = "external/libz" });
 
     return lib;
 }
@@ -231,10 +231,10 @@ fn create_libbpf(b: *Builder, target: std.zig.CrossTarget, optimize: std.builtin
         "-DZIG_BTF_WA",
     };
     libbpf.addCSourceFiles(&libbpfSources, &libbpfFlags);
-    libbpf.addIncludePath("external/libbpf/include");
-    libbpf.addIncludePath("external/libbpf/include/uapi");
-    libbpf.addIncludePath("external/libelf/include");
-    libbpf.addIncludePath("external/libz");
+    libbpf.addIncludePath(.{ .path = "external/libbpf/include" });
+    libbpf.addIncludePath(.{ .path = "external/libbpf/include/uapi" });
+    libbpf.addIncludePath(.{ .path = "external/libelf/include" });
+    libbpf.addIncludePath(.{ .path = "external/libz" });
     libbpf.linkLibC();
     libbpf.linkLibrary(libz);
     libbpf.linkLibrary(libelf);
@@ -275,7 +275,7 @@ fn create_vmlinux(b: *Builder) *Builder.Module {
     });
     exe.linkLibrary(libbpf);
     exe.linkLibC();
-    exe.addIncludePath("external/libbpf/src");
+    exe.addIncludePath(.{ .path = "external/libbpf/src" });
     b.installArtifact(exe);
 
     const run_exe = b.addRunArtifact(exe);
@@ -342,7 +342,7 @@ pub fn build(b: *Builder) !void {
 
     exe.linkLibrary(libbpf);
     exe.linkLibC();
-    exe.addIncludePath("external/libbpf/src");
+    exe.addIncludePath(.{ .path = "external/libbpf/src" });
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
@@ -364,8 +364,8 @@ pub fn build(b: *Builder) !void {
     exe_tests.filter = b.option([]const u8, "test", "test filter");
     exe_tests.linkLibrary(libbpf);
     exe_tests.linkLibC();
-    exe_tests.addIncludePath("external/libbpf/src");
-    const install_test = b.addInstallArtifact(exe_tests);
+    exe_tests.addIncludePath(.{ .path = "external/libbpf/src" });
+    const install_test = b.addInstallArtifact(exe_tests, .{});
 
     // Create bpf programs for test
     var sample_dir = try fs.cwd().openIterableDir("samples", .{});

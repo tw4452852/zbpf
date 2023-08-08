@@ -11,11 +11,11 @@ var n: u32 = 0;
 export fn test_ringbuf() linksection("kprobe/do_nanosleep") c_int {
     const pid = my_pid.lookup(0) orelse return 1;
 
-    const cur_pid = @truncate(u32, helpers.get_current_pid_tgid());
+    const cur_pid: u32 = @truncate(helpers.get_current_pid_tgid());
     if (cur_pid == pid.*) {
         var a: u8 = '1';
         if (n % 2 == 1) {
-            events.event_output(std.mem.asBytes(&a), @intToEnum(bpf.Map.RingBufNotify, n % 3)) catch return 1;
+            events.event_output(std.mem.asBytes(&a), @enumFromInt(n % 3)) catch return 1;
         } else {
             const resv = events.reserve(@TypeOf(a)) catch return 2;
             resv.data_ptr.* = a;

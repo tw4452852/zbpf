@@ -17,6 +17,6 @@ export fn test_ksyscall(args: *tracked_syscall.Ctx()) linksection(tracked_syscal
 
 export fn test_kretsyscall(args: *tracked_syscall.Ctx()) linksection(tracked_syscall.exit_section()) callconv(.C) c_long {
     const ret = args.ret();
-    exit.update(.any, 0, @intCast(i64, ret)) catch return -2;
+    exit.update(.any, 0, @intCast(ret)) catch return -2;
     return 0;
 }

@@ -36,7 +36,7 @@ test "fentry" {
         print("failed to attach entry_prog {s}: {}\n", .{ libbpf.bpf_program__name(entry_prog), errno });
 
         const ENOTSUPP = 524;
-        if (@enumToInt(errno) == ENOTSUPP) return error.SkipZigTest;
+        if (@intFromEnum(errno) == ENOTSUPP) return error.SkipZigTest;
         return error.ATTACH;
     };
     defer _ = libbpf.bpf_link__destroy(entry_link);
