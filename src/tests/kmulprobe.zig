@@ -4,6 +4,7 @@ const print = std.debug.print;
 const testing = std.testing;
 const allocator = root.allocator;
 const libbpf = root.libbpf;
+const REGS = @import("bpf").Args.REGS;
 
 test "kmulprobe" {
     if (!root.btf_name_exist("bpf_kprobe_multi_link")) return error.SkipZigTest;
@@ -55,26 +56,55 @@ test "kmulprobe" {
         return error.ATTACH;
     };
     defer _ = libbpf.bpf_link__destroy(entry_link);
+
+    opt.retprobe = true;
     const exit_link = libbpf.bpf_program__attach_kprobe_multi_opts(exit_prog, null, @ptrCast(&opt)) orelse {
         print("failed to attach prog {s}: {}\n", .{ libbpf.bpf_program__name(exit_prog), std.os.errno(-1) });
         return error.ATTACH;
     };
     defer _ = libbpf.bpf_link__destroy(exit_link);
 
+    // setup events ring buffer
+    const events = libbpf.bpf_object__find_map_by_name(obj, "events").?;
+    var ctx = Ctx{
+        .seen = 0,
+        .arg2 = 0,
+        .ret = 0,
+    };
+    const ring_buf = libbpf.ring_buffer__new(libbpf.bpf_map__fd(events), on_sample, &ctx, null).?;
+    defer libbpf.ring_buffer__free(ring_buf);
+
+    const expected_count = syms.len;
     // trigger kprobes
     var buf: [64]u8 = undefined;
     var sx = std.mem.zeroes(std.os.linux.Statx);
-    _ = std.os.linux.listxattr("/nonexist", &buf, buf.len);
-    _ = std.os.linux.statx(0, "/noexist", 0, 0, &sx);
+    var expect_ret: i32 = @truncate(@as(isize, @bitCast(std.os.linux.listxattr("/nonexist", &buf, buf.len))));
+    expect_ret +%= @truncate(@as(isize, @bitCast(std.os.linux.statx(0, "/noexist", 0, 0, &sx))));
+    const expect_arg2: i32 = buf.len + 0;
 
-    const k: u32 = 0;
-    var got: u64 = undefined;
-    const map = libbpf.bpf_object__find_map_by_name(obj, "count").?;
-    ret = libbpf.bpf_map__lookup_elem(map, &k, @sizeOf(@TypeOf(k)), &got, @sizeOf(@TypeOf(got)), 0);
-    if (ret != 0) {
-        print("failed loopup map element: {}\n", .{std.os.errno(-1)});
-        return error.MAP_LOOKUP;
+    const n = libbpf.ring_buffer__consume(ring_buf);
+    if (n != expected_count) {
+        print("failed consume ring buffer: return {}, expect {}, err:{}\n", .{ n, expected_count, std.os.errno(-1) });
+        return error.PERF_BUF;
     }
 
-    try testing.expectEqual(syms.len * 2, got);
+    try testing.expectEqual(@as(@TypeOf(ctx.seen), @intCast(expected_count)), ctx.seen);
+    try testing.expectEqual(expect_ret, ctx.ret);
+    try testing.expectEqual(expect_arg2, ctx.arg2);
+}
+
+const Ctx = extern struct {
+    seen: u32,
+    ret: i32,
+    arg2: i32,
+};
+
+fn on_sample(_ctx: ?*anyopaque, _data: ?*anyopaque, _: usize) callconv(.C) c_int {
+    var ctx: *Ctx = @ptrCast(@alignCast(_ctx.?));
+    const args: *REGS = @alignCast(@ptrCast(_data.?));
+
+    ctx.seen += 1;
+    ctx.ret +%= @truncate(@as(isize, @bitCast(args.ret_ptr().*)));
+    ctx.arg2 +%= @truncate(@as(isize, @bitCast(args.arg2_ptr().*)));
+    return 0;
 }

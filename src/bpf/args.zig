@@ -54,76 +54,70 @@ pub fn Ctx(comptime func_name: []const u8) type {
     });
 }
 
-const REGS = opaque {
+pub const REGS = extern struct {
     const Self = @This();
-    const S = switch (arch) {
+    impl: switch (arch) {
         .x86, .x86_64, .arm => vmlinux.pt_regs,
         .aarch64 => vmlinux.user_pt_regs,
-        else => {},
-    };
+        else => @panic("toto"),
+    },
 
     pub fn arg0_ptr(self: *Self) *c_ulong {
-        const s: *S = @ptrCast(@alignCast(self));
         return switch (arch) {
-            .x86_64 => &s.di,
-            .x86 => &s.eax,
-            .arm => &s.uregs[0],
-            .aarch64 => &s.regs[0],
+            .x86_64 => &self.impl.di,
+            .x86 => &self.impl.eax,
+            .arm => &self.impl.uregs[0],
+            .aarch64 => &self.impl.regs[0],
             else => {},
         };
     }
 
     pub fn arg1_ptr(self: *Self) *c_ulong {
-        const s: *S = @ptrCast(@alignCast(self));
         return switch (arch) {
-            .x86_64 => &s.si,
-            .x86 => &s.edx,
-            .arm => &s.uregs[1],
-            .aarch64 => &s.regs[1],
+            .x86_64 => &self.impl.si,
+            .x86 => &self.impl.edx,
+            .arm => &self.impl.uregs[1],
+            .aarch64 => &self.impl.regs[1],
             else => {},
         };
     }
 
     pub fn arg2_ptr(self: *Self) *c_ulong {
-        const s: *S = @ptrCast(@alignCast(self));
         return switch (arch) {
-            .x86_64 => &s.dx,
-            .x86 => &s.ecx,
-            .arm => &s.uregs[2],
-            .aarch64 => &s.regs[2],
+            .x86_64 => &self.impl.dx,
+            .x86 => &self.impl.ecx,
+            .arm => &self.impl.uregs[2],
+            .aarch64 => &self.impl.regs[2],
             else => {},
         };
     }
 
     pub fn arg3_ptr(self: *Self, for_syscall: bool) *c_ulong {
-        const s: *S = @ptrCast(@alignCast(self));
         return switch (arch) {
-            .x86_64 => if (for_syscall) &s.r10 else &s.cx,
+            .x86_64 => if (for_syscall) &self.impl.r10 else &self.impl.cx,
             .x86 => @compileError(std.fmt.comptimePrint("not support arg3 on i386", .{})),
-            .arm => &s.uregs[3],
-            .aarch64 => &s.regs[3],
+            .arm => &self.impl.uregs[3],
+            .aarch64 => &self.impl.regs[3],
             else => {},
         };
     }
 
     pub fn arg4_ptr(self: *Self) *c_ulong {
-        const s: *S = @ptrCast(@alignCast(self));
         return switch (arch) {
-            .x86_64 => &s.r8,
+            .x86_64 => &self.impl.r8,
             .x86 => @compileError(std.fmt.comptimePrint("not support arg4 on i386", .{})),
-            .arm => &s.uregs[4],
-            .aarch64 => &s.regs[4],
+            .arm => &self.impl.uregs[4],
+            .aarch64 => &self.impl.regs[4],
             else => {},
         };
     }
 
     pub fn ret_ptr(self: *Self) *c_ulong {
-        const s: *S = @ptrCast(@alignCast(self));
         return switch (arch) {
-            .x86_64 => &s.ax,
-            .x86 => &s.eax,
-            .arm => &s.uregs[0],
-            .aarch64 => &s.regs[0],
+            .x86_64 => &self.impl.ax,
+            .x86 => &self.impl.eax,
+            .arm => &self.impl.uregs[0],
+            .aarch64 => &self.impl.regs[0],
             else => {},
         };
     }
@@ -137,31 +131,31 @@ pub fn PT_REGS(comptime func_name: []const u8) type {
 
         pub usingnamespace if (f.Fn.params.len < 1) struct {} else struct {
             pub fn arg0(self: *Self) f.Fn.params[0].type.? {
-                return @as(*REGS, @ptrCast(self)).arg0_ptr().*;
+                return @as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*;
             }
         };
 
         pub usingnamespace if (f.Fn.params.len < 2) struct {} else struct {
             pub fn arg1(self: *Self) f.Fn.params[1].type.? {
-                return @as(*REGS, @ptrCast(self)).arg1_ptr().*;
+                return @as(*REGS, @alignCast(@ptrCast(self))).arg1_ptr().*;
             }
         };
 
         pub usingnamespace if (f.Fn.params.len < 3) struct {} else struct {
             pub fn arg2(self: *Self) f.Fn.params[2].type.? {
-                return @as(*REGS, @ptrCast(self)).arg2_ptr().*;
+                return @as(*REGS, @alignCast(@ptrCast(self))).arg2_ptr().*;
             }
         };
 
         pub usingnamespace if (f.Fn.params.len < 4) struct {} else struct {
             pub fn arg3(self: *Self) f.Fn.params[3].type.? {
-                return @as(*REGS, @ptrCast(self)).arg3_ptr(false).*;
+                return @as(*REGS, @alignCast(@ptrCast(self))).arg3_ptr(false).*;
             }
         };
 
         pub usingnamespace if (f.Fn.params.len < 5) struct {} else struct {
             pub fn arg4(self: *Self) f.Fn.params[4].type.? {
-                return @as(*REGS, @ptrCast(self)).arg4_ptr().*;
+                return @as(*REGS, @alignCast(@ptrCast(self))).arg4_ptr().*;
             }
         };
 
@@ -170,7 +164,7 @@ pub fn PT_REGS(comptime func_name: []const u8) type {
         const is_pointer = ti == .Pointer or (ti == .Optional and @typeInfo(ti.Optional.child) == .Pointer);
         pub usingnamespace if (RET == void) struct {} else struct {
             pub fn ret(self: *Self) RET {
-                const rc = @as(*REGS, @ptrCast(self)).ret_ptr().*;
+                const rc = @as(*REGS, @alignCast(@ptrCast(self))).ret_ptr().*;
                 return if (!is_pointer) @intCast(rc) else rc;
             }
         };
@@ -194,51 +188,51 @@ pub fn SYSCALL(comptime name: []const u8) type {
 
         pub fn arg0(self: *Self) !c_ulong {
             if (LINUX_HAS_SYSCALL_WRAPPER) {
-                const ctx: *REGS = @ptrFromInt(@as(*REGS, @ptrCast(self)).arg0_ptr().*);
+                const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
                 var d: c_ulong = undefined;
                 const r = helpers.probe_read_kernel(&d, @sizeOf(c_ulong), ctx.arg0_ptr());
                 return if (r != 0) error.READ_KERN else d;
-            } else return @as(*REGS, @ptrCast(self)).arg0_ptr().*;
+            } else return @as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*;
         }
 
         pub fn arg1(self: *Self) !c_ulong {
             if (LINUX_HAS_SYSCALL_WRAPPER) {
-                const ctx: *REGS = @ptrFromInt(@as(*REGS, @ptrCast(self)).arg0_ptr().*);
+                const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
                 var d: c_ulong = undefined;
                 const r = helpers.probe_read_kernel(&d, @sizeOf(c_ulong), ctx.arg1_ptr());
                 return if (r != 0) error.READ_KERN else d;
-            } else return @as(*REGS, @ptrCast(self)).arg1_ptr().*;
+            } else return @as(*REGS, @alignCast(@ptrCast(self))).arg1_ptr().*;
         }
 
         pub fn arg2(self: *Self) !c_ulong {
             if (LINUX_HAS_SYSCALL_WRAPPER) {
-                const ctx: *REGS = @ptrFromInt(@as(*REGS, @ptrCast(self)).arg0_ptr().*);
+                const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
                 var d: c_ulong = undefined;
                 const r = helpers.probe_read_kernel(&d, @sizeOf(c_ulong), ctx.arg2_ptr());
                 return if (r != 0) error.READ_KERN else d;
-            } else return @as(*REGS, @ptrCast(self)).arg2_ptr().*;
+            } else return @as(*REGS, @alignCast(@ptrCast(self))).arg2_ptr().*;
         }
 
         pub fn arg3(self: *Self) !c_ulong {
             if (LINUX_HAS_SYSCALL_WRAPPER) {
-                const ctx: *REGS = @ptrFromInt(@as(*REGS, @ptrCast(self)).arg0_ptr().*);
+                const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
                 var d: c_ulong = undefined;
                 const r = helpers.probe_read_kernel(&d, @sizeOf(c_ulong), ctx.arg3_ptr(true));
                 return if (r != 0) error.READ_KERN else d;
-            } else return @as(*REGS, @ptrCast(self)).arg3_ptr(true).*;
+            } else return @as(*REGS, @alignCast(@ptrCast(self))).arg3_ptr(true).*;
         }
 
         pub fn arg4(self: *Self) !c_ulong {
             if (LINUX_HAS_SYSCALL_WRAPPER) {
-                const ctx: *REGS = @ptrFromInt(@as(*REGS, @ptrCast(self)).arg0_ptr().*);
+                const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
                 var d: c_ulong = undefined;
                 const r = helpers.probe_read_kernel(&d, @sizeOf(c_ulong), ctx.arg4_ptr());
                 return if (r != 0) error.READ_KERN else d;
-            } else return @as(*REGS, @ptrCast(self)).arg4_ptr().*;
+            } else return @as(*REGS, @alignCast(@ptrCast(self))).arg4_ptr().*;
         }
 
         pub fn ret(self: *Self) c_ulong {
-            return @as(*REGS, @ptrCast(self)).ret_ptr().*;
+            return @as(*REGS, @alignCast(@ptrCast(self))).ret_ptr().*;
         }
     };
 }

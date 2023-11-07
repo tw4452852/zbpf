@@ -25,12 +25,6 @@ fn create_bpf_prog(ctx: *const Ctx, src_path: ?[]const u8) *std.build.CompileSte
     prog.addModule("bpf", ctx.bpf);
     prog.linkLibC();
 
-    if (debugging) {
-        prog.emit_llvm_ir = .{
-            .emit_to = std.fmt.allocPrint(ctx.b.allocator, "/tmp/{s}.ir", .{name}) catch unreachable,
-        };
-    }
-
     return prog;
 }
 
@@ -363,6 +357,7 @@ pub fn build(b: *Builder) !void {
     });
     exe_tests.filter = b.option([]const u8, "test", "test filter");
     exe_tests.linkLibrary(libbpf);
+    exe_tests.addModule("bpf", ctx.bpf);
     exe_tests.linkLibC();
     exe_tests.addIncludePath(.{ .path = "external/libbpf/src" });
     const install_test = b.addInstallArtifact(exe_tests, .{});

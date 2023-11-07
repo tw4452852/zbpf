@@ -74,7 +74,7 @@ fn Map(
         }
 
         /// Perform a lookup in *map* for an entry associated to *key*.
-        pub fn lookup(_: *const Self, key: Key) ?*Value {
+        pub fn lookup(_: *const Self, key: Key) ?*const Value {
             return @ptrCast(@alignCast(helpers.map_lookup_elem(@ptrCast(&Self.def), &key)));
         }
 
@@ -128,7 +128,7 @@ pub fn HashMap(
             return .{ .map = .{} };
         }
 
-        pub fn lookup(self: *const Self, key: Key) ?*Value {
+        pub fn lookup(self: *const Self, key: Key) ?*const Value {
             return self.map.lookup(key);
         }
 
@@ -157,7 +157,7 @@ pub fn ArrayMap(
             return .{ .map = .{} };
         }
 
-        pub fn lookup(self: *const Self, key: u32) ?*Value {
+        pub fn lookup(self: *const Self, key: u32) ?*const Value {
             return self.map.lookup(key);
         }
 
@@ -231,7 +231,7 @@ pub fn RingBuffer(
             }
         } {
             if (helpers.ringbuf_reserve(&@TypeOf(self.map).def, @sizeOf(T), 0)) |ptr| return .{
-                .data_ptr = @ptrCast(ptr),
+                .data_ptr = @alignCast(@ptrCast(ptr)),
             } else return error.Unknown;
         }
     };
