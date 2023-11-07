@@ -12,6 +12,11 @@ fn btf_dump_printf(ctx: ?*anyopaque, fmt: [*c]const u8, args: @typeInfo(@typeInf
 
 // vmlinux_dumper [path_to_vmlinux]
 pub fn main() !void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+
+    const allocator = arena.allocator();
+
     var it = std.process.args();
     _ = it.skip(); // skip process name
     const btf = if (it.next()) |vmlinux| libbpf.btf__parse(vmlinux, null) else libbpf.btf__load_vmlinux_btf();
@@ -38,11 +43,16 @@ pub fn main() !void {
         }
     }
 
+    var funcs = std.StringHashMap(void).init(allocator);
+    defer funcs.deinit();
+
     for (0..n) |i| {
         const t = libbpf.btf__type_by_id(btf, @intCast(i));
         if (libbpf.btf_kind(t) == libbpf.BTF_KIND_FUNC) {
             var buf: [256]u8 = undefined;
             const func_name = try std.fmt.bufPrintZ(&buf, "_zig_{s}", .{libbpf.btf__name_by_offset(btf, t[0].name_off)});
+            if (funcs.get(func_name) != null) continue;
+
             const OPT = extern struct {
                 sz: usize,
                 field_name: [*c]const u8,
@@ -59,6 +69,8 @@ pub fn main() !void {
                 return error.DUMP;
             }
             try std.fmt.format(stdout, ";\n", .{});
+
+            try funcs.put(try allocator.dupe(u8, func_name), {});
         }
     }
 }
