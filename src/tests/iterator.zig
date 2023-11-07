@@ -46,8 +46,9 @@ test "iterator" {
         };
 
         var got: u64 = undefined;
+        const native_endian = @import("builtin").target.cpu.arch.endian();
         while (true) {
-            got = r.readIntNative(u64) catch |e| switch (e) {
+            got = r.readInt(u64, native_endian) catch |e| switch (e) {
                 error.EndOfStream => break,
                 else => return e,
             };

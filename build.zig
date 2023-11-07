@@ -15,8 +15,8 @@ fn create_bpf_prog(ctx: *const Ctx, src_path: ?[]const u8) *std.build.CompileSte
         } else null,
         .target = .{
             .cpu_arch = switch ((ctx.target.cpu_arch orelse builtin.cpu.arch).endian()) {
-                .Big => .bpfeb,
-                .Little => .bpfel,
+                .big => .bpfeb,
+                .little => .bpfel,
             },
             .os_tag = .freestanding,
         },
@@ -35,7 +35,7 @@ fn create_libz(b: *Builder, target: std.zig.CrossTarget, optimize: std.builtin.M
         .optimize = optimize,
     });
     lib.linkLibC();
-    lib.addCSourceFiles(&.{
+    lib.addCSourceFiles(.{ .files = &.{
         "external/libz/adler32.c",
         "external/libz/crc32.c",
         "external/libz/deflate.c",
@@ -51,7 +51,7 @@ fn create_libz(b: *Builder, target: std.zig.CrossTarget, optimize: std.builtin.M
         "external/libz/gzlib.c",
         "external/libz/gzread.c",
         "external/libz/gzwrite.c",
-    }, &.{"-std=c89"});
+    }, .flags = &.{"-std=c89"} });
 
     return lib;
 }
@@ -63,7 +63,7 @@ fn create_libelf(b: *Builder, target: std.zig.CrossTarget, optimize: std.builtin
         .optimize = optimize,
     });
     lib.linkLibC();
-    lib.addCSourceFiles(&.{
+    lib.addCSourceFiles(.{ .files = &.{
         "external/libelf/src/crc32.c",
         "external/libelf/src/elf32_checksum.c",
         "external/libelf/src/elf32_fsize.c",
@@ -182,7 +182,7 @@ fn create_libelf(b: *Builder, target: std.zig.CrossTarget, optimize: std.builtin
         "external/libelf/src/libelf_next_prime.c",
         "external/libelf/src/next_prime.c",
         "external/libelf/src/nlist.c",
-    }, &.{"-DHAVE_CONFIG_H"});
+    }, .flags = &.{"-DHAVE_CONFIG_H"} });
 
     lib.addIncludePath(.{ .path = "external/libelf/include" });
     lib.addIncludePath(.{ .path = "external/libelf/src" });
@@ -224,7 +224,7 @@ fn create_libbpf(b: *Builder, target: std.zig.CrossTarget, optimize: std.builtin
         "-D_FILE_OFFSET_BITS=64",
         "-DZIG_BTF_WA",
     };
-    libbpf.addCSourceFiles(&libbpfSources, &libbpfFlags);
+    libbpf.addCSourceFiles(.{ .files = &libbpfSources, .flags = &libbpfFlags });
     libbpf.addIncludePath(.{ .path = "external/libbpf/include" });
     libbpf.addIncludePath(.{ .path = "external/libbpf/include/uapi" });
     libbpf.addIncludePath(.{ .path = "external/libelf/include" });
