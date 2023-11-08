@@ -123,49 +123,82 @@ pub const REGS = extern struct {
     }
 };
 
+pub inline fn is_pointer(comptime typ: type) bool {
+    const ti = @typeInfo(typ);
+    return ti == .Pointer or (ti == .Optional and @typeInfo(ti.Optional.child) == .Pointer);
+}
+
 pub fn PT_REGS(comptime func_name: []const u8) type {
     const f = @typeInfo(@TypeOf(@field(vmlinux, func_prefix ++ func_name)));
 
     return opaque {
         const Self = @This();
 
+        fn cast(comptime T: type, rc: c_ulong) T {
+            if (is_pointer(T)) return rc;
+
+            const ti = @typeInfo(T);
+            if (ti == .Int) {
+                if (ti.Int.signedness == .signed) {
+                    return @truncate(@as(c_long, @bitCast(rc)));
+                }
+                return @truncate(rc);
+            }
+
+            return rc;
+        }
+
         pub usingnamespace if (f.Fn.params.len < 1) struct {} else struct {
-            pub fn arg0(self: *Self) f.Fn.params[0].type.? {
-                return @as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*;
+            const RET = f.Fn.params[0].type.?;
+
+            pub fn arg0(self: *Self) RET {
+                const rc = @as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*;
+                return cast(RET, rc);
             }
         };
 
         pub usingnamespace if (f.Fn.params.len < 2) struct {} else struct {
-            pub fn arg1(self: *Self) f.Fn.params[1].type.? {
-                return @as(*REGS, @alignCast(@ptrCast(self))).arg1_ptr().*;
+            const RET = f.Fn.params[1].type.?;
+
+            pub fn arg1(self: *Self) RET {
+                const rc = @as(*REGS, @alignCast(@ptrCast(self))).arg1_ptr().*;
+                return cast(RET, rc);
             }
         };
 
         pub usingnamespace if (f.Fn.params.len < 3) struct {} else struct {
-            pub fn arg2(self: *Self) f.Fn.params[2].type.? {
-                return @as(*REGS, @alignCast(@ptrCast(self))).arg2_ptr().*;
+            const RET = f.Fn.params[2].type.?;
+
+            pub fn arg2(self: *Self) RET {
+                const rc = @as(*REGS, @alignCast(@ptrCast(self))).arg2_ptr().*;
+                return cast(RET, rc);
             }
         };
 
         pub usingnamespace if (f.Fn.params.len < 4) struct {} else struct {
-            pub fn arg3(self: *Self) f.Fn.params[3].type.? {
-                return @as(*REGS, @alignCast(@ptrCast(self))).arg3_ptr(false).*;
+            const RET = f.Fn.params[3].type.?;
+
+            pub fn arg3(self: *Self) RET {
+                const rc = @as(*REGS, @alignCast(@ptrCast(self))).arg3_ptr(false).*;
+                return cast(RET, rc);
             }
         };
 
         pub usingnamespace if (f.Fn.params.len < 5) struct {} else struct {
-            pub fn arg4(self: *Self) f.Fn.params[4].type.? {
-                return @as(*REGS, @alignCast(@ptrCast(self))).arg4_ptr().*;
+            const RET = f.Fn.params[4].type.?;
+
+            pub fn arg4(self: *Self) RET {
+                const rc = @as(*REGS, @alignCast(@ptrCast(self))).arg4_ptr().*;
+                return cast(RET, rc);
             }
         };
 
-        const RET = f.Fn.return_type.?;
-        const ti = @typeInfo(RET);
-        const is_pointer = ti == .Pointer or (ti == .Optional and @typeInfo(ti.Optional.child) == .Pointer);
-        pub usingnamespace if (RET == void) struct {} else struct {
+        pub usingnamespace if (f.Fn.return_type.? == void) struct {} else struct {
+            const RET = f.Fn.return_type.?;
+
             pub fn ret(self: *Self) RET {
                 const rc = @as(*REGS, @alignCast(@ptrCast(self))).ret_ptr().*;
-                return if (!is_pointer) @intCast(rc) else rc;
+                return cast(RET, rc);
             }
         };
     };
@@ -236,3 +269,9 @@ pub fn SYSCALL(comptime name: []const u8) type {
         }
     };
 }
+
+pub const TRACE_RECORD = extern struct {
+    id: u32,
+    tpid: u64,
+    regs: REGS,
+};

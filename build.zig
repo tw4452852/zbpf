@@ -3,14 +3,14 @@ const builtin = @import("builtin");
 const fs = std.fs;
 const Builder = std.build.Builder;
 
-fn create_bpf_prog(ctx: *const Ctx, src_path: ?[]const u8) *std.build.CompileStep {
-    const name = fs.path.stem(src_path orelse "?");
+fn create_bpf_prog(ctx: *const Ctx, src_path: []const u8) *std.build.CompileStep {
+    const name = fs.path.stem(src_path);
 
     const prog = ctx.b.addObject(.{
         .name = name,
-        .root_source_file = if (src_path) |path| .{
-            .path = path,
-        } else null,
+        .root_source_file = .{
+            .path = src_path,
+        },
         .target = .{
             .cpu_arch = switch ((ctx.target.cpu_arch orelse builtin.cpu.arch).endian()) {
                 .big => .bpfeb,
@@ -21,7 +21,9 @@ fn create_bpf_prog(ctx: *const Ctx, src_path: ?[]const u8) *std.build.CompileSte
         .optimize = .ReleaseFast,
     });
     prog.addModule("bpf", ctx.bpf);
+    prog.addModule("build_options", ctx.bpf);
     prog.linkLibC();
+    prog.addOptions("build_options", ctx.build_options);
 
     return prog;
 }
@@ -297,7 +299,7 @@ const Ctx = struct {
     optimize: std.builtin.Mode,
     bpf: *Builder.Module,
     libbpf_step: *std.build.CompileStep,
-    debugging: bool,
+    build_options: *std.Build.Step.Options,
 };
 
 pub fn build(b: *Builder) !void {
@@ -310,27 +312,36 @@ pub fn build(b: *Builder) !void {
     // build bpf package
     const bpf = create_bpf(b);
 
+    const build_options = b.addOptions();
+    const debugging = if (b.option(bool, "debug", "enable debugging log")) |v| v else false;
+    const traced_funcs = if (b.option([]const []const u8, "trace", "the traced kernel function name")) |v| v else &.{};
+    build_options.addOption(@TypeOf(debugging), "debug", debugging);
+    build_options.addOption(@TypeOf(traced_funcs), "traced_funcs", traced_funcs);
+
     const ctx = Ctx{
         .b = b,
         .target = target,
         .optimize = optimize,
         .bpf = bpf,
         .libbpf_step = libbpf,
-        .debugging = if (b.option(bool, "debug", "enable debugging log")) |v| v else false,
+        .build_options = build_options,
     };
 
-    // build default bpf program
+    // default bpf program
     const bpf_src = if (b.option([]const u8, "bpf", "bpf program source path")) |v| v else "samples/perf_event.zig";
     const exe_src = if (b.option([]const u8, "main", "main executable source path")) |v| v else "src/hello.zig";
-    try create_default_step(&ctx, exe_src, bpf_src);
+    try create_target_step(&ctx, exe_src, bpf_src, null);
+
+    try create_target_step(&ctx, "src/trace.zig", "samples/trace.zig", "trace");
 
     try create_test_step(&ctx);
 }
 
-fn create_default_step(ctx: *const Ctx, main_path: []const u8, prog_path: []const u8) !void {
+fn create_target_step(ctx: *const Ctx, main_path: []const u8, prog_path: []const u8, exe_name: ?[]const u8) !void {
     const prog = create_bpf_prog(ctx, prog_path);
+
     const exe = ctx.b.addExecutable(.{
-        .name = "zbpf",
+        .name = if (exe_name) |name| name else "zbpf",
         .root_source_file = .{ .path = main_path },
         .target = ctx.target,
         .optimize = ctx.optimize,
@@ -338,11 +349,24 @@ fn create_default_step(ctx: *const Ctx, main_path: []const u8, prog_path: []cons
     exe.addAnonymousModule("@bpf_prog", .{
         .source_file = prog.getOutputSource(),
     });
+    exe.addModule("bpf", ctx.bpf);
+    exe.addOptions("build_options", ctx.build_options);
 
     exe.linkLibrary(ctx.libbpf_step);
     exe.linkLibC();
     exe.addIncludePath(.{ .path = "external/libbpf/src" });
-    ctx.b.installArtifact(exe);
+
+    // if executable is not named, it is default target
+    // otherwise, create a step for it
+    if (exe_name) |name| {
+        const install_exe = ctx.b.addInstallArtifact(exe, .{});
+        var buf: [64]u8 = undefined;
+        const description = try std.fmt.bufPrint(&buf, "Build {s}", .{name});
+        const build_step = ctx.b.step(name, description);
+        build_step.dependOn(&install_exe.step);
+    } else {
+        ctx.b.installArtifact(exe);
+    }
 }
 
 fn create_test_step(ctx: *const Ctx) !void {
@@ -371,9 +395,7 @@ fn create_test_step(ctx: *const Ctx) !void {
     }
 
     // add debug option to test
-    const tests_options = ctx.b.addOptions();
-    exe_tests.addOptions("build_options", tests_options);
-    tests_options.addOption(bool, "debug", ctx.debugging);
+    exe_tests.addOptions("build_options", ctx.build_options);
 
     const run_test_step = ctx.b.step("test", "Build unit tests");
     run_test_step.dependOn(&install_test.step);

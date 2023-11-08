@@ -74,7 +74,7 @@ fn Map(
         }
 
         /// Perform a lookup in *map* for an entry associated to *key*.
-        pub fn lookup(_: *const Self, key: Key) ?*const Value {
+        pub fn lookup(_: *const Self, key: Key) ?*Value {
             return @ptrCast(@alignCast(helpers.map_lookup_elem(@ptrCast(&Self.def), &key)));
         }
 
@@ -128,7 +128,7 @@ pub fn HashMap(
             return .{ .map = .{} };
         }
 
-        pub fn lookup(self: *const Self, key: Key) ?*const Value {
+        pub fn lookup(self: *const Self, key: Key) ?*Value {
             return self.map.lookup(key);
         }
 
