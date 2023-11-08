@@ -181,8 +181,8 @@ pub fn PerfEventArray(
             return .{ .map = .{} };
         }
 
-        pub fn event_output(self: *const Self, ctx: anytype, index: ?u64, data: []u8) !void {
-            const rc = helpers.perf_event_output(ctx, @ptrCast(&@TypeOf(self.map).def), if (index) |i| i else vmlinux.BPF_F_CURRENT_CPU, data.ptr, data.len);
+        pub fn event_output(self: *const Self, ctx: anytype, index: ?u64, data: []const u8) !void {
+            const rc = helpers.perf_event_output(ctx, @ptrCast(&@TypeOf(self.map).def), if (index) |i| i else vmlinux.BPF_F_CURRENT_CPU, @constCast(data.ptr), data.len);
             return switch (rc) {
                 0 => {},
                 else => error.Unknown,
@@ -211,8 +211,8 @@ pub fn RingBuffer(
             return .{ .map = .{} };
         }
 
-        pub fn event_output(self: *const Self, data: []u8, notify: RingBufNotify) !void {
-            const rc = helpers.ringbuf_output(&@TypeOf(self.map).def, data.ptr, data.len, switch (notify) {
+        pub fn event_output(self: *const Self, data: []const u8, notify: RingBufNotify) !void {
+            const rc = helpers.ringbuf_output(&@TypeOf(self.map).def, @constCast(data.ptr), data.len, switch (notify) {
                 .auto => 0,
                 .force_notify => vmlinux.BPF_RB_FORCE_WAKEUP,
                 .not_notify => vmlinux.BPF_RB_NO_WAKEUP,

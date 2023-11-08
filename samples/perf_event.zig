@@ -11,8 +11,7 @@ export fn test_perf_event_array(ctx: *opaque {}) linksection("kprobe/do_nanoslee
 
     const cur_pid: u32 = @truncate(helpers.get_current_pid_tgid());
     if (cur_pid == pid.*) {
-        var a: u8 = '1';
-        events.event_output(ctx, null, std.mem.asBytes(&a)) catch return 1;
+        events.event_output(ctx, null, "hello") catch return 1;
     }
     return 0;
 }

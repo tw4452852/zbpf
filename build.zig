@@ -3,8 +3,6 @@ const builtin = @import("builtin");
 const fs = std.fs;
 const Builder = std.build.Builder;
 
-const debugging = false;
-
 fn create_bpf_prog(ctx: *const Ctx, src_path: ?[]const u8) *std.build.CompileStep {
     const name = fs.path.stem(src_path orelse "?");
 
@@ -299,6 +297,7 @@ const Ctx = struct {
     optimize: std.builtin.Mode,
     bpf: *Builder.Module,
     libbpf_step: *std.build.CompileStep,
+    debugging: bool,
 };
 
 pub fn build(b: *Builder) !void {
@@ -317,67 +316,65 @@ pub fn build(b: *Builder) !void {
         .optimize = optimize,
         .bpf = bpf,
         .libbpf_step = libbpf,
+        .debugging = if (b.option(bool, "debug", "enable debugging log")) |v| v else false,
     };
 
-    // build bpf program
-    const bpf_src = b.option([]const u8, "bpf", "bpf program source path");
-    const prog = create_bpf_prog(&ctx, bpf_src);
+    // build default bpf program
+    const bpf_src = if (b.option([]const u8, "bpf", "bpf program source path")) |v| v else "samples/perf_event.zig";
+    const exe_src = if (b.option([]const u8, "main", "main executable source path")) |v| v else "src/hello.zig";
+    try create_default_step(&ctx, exe_src, bpf_src);
 
-    const exe_src = b.option([]const u8, "main", "main executable source path");
-    const exe = b.addExecutable(.{
+    try create_test_step(&ctx);
+}
+
+fn create_default_step(ctx: *const Ctx, main_path: []const u8, prog_path: []const u8) !void {
+    const prog = create_bpf_prog(ctx, prog_path);
+    const exe = ctx.b.addExecutable(.{
         .name = "zbpf",
-        .root_source_file = if (exe_src) |p| .{ .path = p } else null,
-        .target = target,
-        .optimize = optimize,
+        .root_source_file = .{ .path = main_path },
+        .target = ctx.target,
+        .optimize = ctx.optimize,
     });
     exe.addAnonymousModule("@bpf_prog", .{
         .source_file = prog.getOutputSource(),
     });
 
-    exe.linkLibrary(libbpf);
+    exe.linkLibrary(ctx.libbpf_step);
     exe.linkLibC();
     exe.addIncludePath(.{ .path = "external/libbpf/src" });
-    b.installArtifact(exe);
+    ctx.b.installArtifact(exe);
+}
 
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.step.dependOn(b.getInstallStep());
-    // This allows the user to pass arguments to the application in the build
-    // command itself, like this: `zig build run -- arg1 arg2 etc`
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
-
+fn create_test_step(ctx: *const Ctx) !void {
     // Creates a step for unit testing.
-    const exe_tests = b.addTest(.{
+    const exe_tests = ctx.b.addTest(.{
         .root_source_file = .{ .path = "src/tests/root.zig" },
-        .target = target,
-        .optimize = optimize,
+        .target = ctx.target,
+        .optimize = ctx.optimize,
     });
-    exe_tests.filter = b.option([]const u8, "test", "test filter");
-    exe_tests.linkLibrary(libbpf);
+    exe_tests.filter = ctx.b.option([]const u8, "test", "test filter");
+    exe_tests.linkLibrary(ctx.libbpf_step);
     exe_tests.addModule("bpf", ctx.bpf);
     exe_tests.linkLibC();
     exe_tests.addIncludePath(.{ .path = "external/libbpf/src" });
-    const install_test = b.addInstallArtifact(exe_tests, .{});
+    const install_test = ctx.b.addInstallArtifact(exe_tests, .{});
 
     // Create bpf programs for test
     var sample_dir = try fs.cwd().openIterableDir("samples", .{});
     defer sample_dir.close();
     var it = sample_dir.iterate();
     while (try it.next()) |entry| {
-        const bpf_prog = create_bpf_prog(&ctx, try fs.path.join(b.allocator, &[_][]const u8{ "samples", entry.name }));
-        exe_tests.addAnonymousModule(try std.fmt.allocPrint(b.allocator, "@{s}", .{fs.path.stem(entry.name)}), .{
+        const bpf_prog = create_bpf_prog(ctx, try fs.path.join(ctx.b.allocator, &[_][]const u8{ "samples", entry.name }));
+        exe_tests.addAnonymousModule(try std.fmt.allocPrint(ctx.b.allocator, "@{s}", .{fs.path.stem(entry.name)}), .{
             .source_file = bpf_prog.getOutputSource(),
         });
     }
 
     // add debug option to test
-    const tests_options = b.addOptions();
+    const tests_options = ctx.b.addOptions();
     exe_tests.addOptions("build_options", tests_options);
-    tests_options.addOption(bool, "debug", debugging);
+    tests_options.addOption(bool, "debug", ctx.debugging);
 
-    const run_test_step = b.step("test", "Build unit tests");
+    const run_test_step = ctx.b.step("test", "Build unit tests");
     run_test_step.dependOn(&install_test.step);
 }
