@@ -3,11 +3,13 @@ const print = std.debug.print;
 const libbpf = @cImport({
     @cInclude("libbpf.h");
 });
-const traced_funcs = @import("build_options").traced_funcs;
 const bpf = @import("bpf");
 const TRACE_RECORD = bpf.Args.TRACE_RECORD;
 const hasFn = std.meta.trait.hasFn;
 const is_pointer = bpf.Args.is_pointer;
+
+const kprobes = @import("build_options").kprobes;
+const syscalls = @import("build_options").syscalls;
 
 var exiting = false;
 
@@ -81,15 +83,16 @@ fn setup_ctrl_c() !void {
 fn on_sample(_: ?*anyopaque, _data: ?*anyopaque, _: usize) callconv(.C) c_int {
     const record: *TRACE_RECORD = @alignCast(@ptrCast(_data.?));
 
+    // kprobes at first, then syscalls
     switch (record.id) {
-        inline 0...traced_funcs.len - 1 => |i| {
-            const func_name = traced_funcs[i];
+        inline 0...kprobes.len - 1 => |i| {
+            const func_name = kprobes[i];
             const tracked_func = bpf.Kprobe{ .name = func_name };
             const T = tracked_func.Ctx();
             const ctx: *T = @ptrCast(&record.regs);
             const pid: u32 = @truncate(record.tpid);
 
-            print("pid: {}, {s}: ", .{ pid, func_name });
+            print("pid: {}, kprobe {s}: ", .{ pid, func_name });
             if (comptime hasFn("arg0")(T)) {
                 const v = ctx.arg0();
 
@@ -121,6 +124,14 @@ fn on_sample(_: ?*anyopaque, _data: ?*anyopaque, _: usize) callconv(.C) c_int {
                 print(", ret: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v});
             }
             print("\n", .{});
+        },
+
+        inline kprobes.len...kprobes.len + syscalls.len - 1 => |i| {
+            // TODO: get syscall prototype
+            const func_name = syscalls[i - kprobes.len];
+            const pid: u32 = @truncate(record.tpid);
+
+            print("pid: {}, syscall {s}: arg0: 0x{x}, arg1: 0x{x}, arg2: 0x{x}, arg3: 0x{x}, arg4: 0x{x}, ret: 0x{x}\n", .{ pid, func_name, record.regs.arg0_ptr().*, record.regs.arg1_ptr().*, record.regs.arg2_ptr().*, record.regs.arg3_ptr(true).*, record.regs.arg4_ptr().*, record.regs.ret_ptr().* });
         },
 
         else => print("Unknown function id: {}\n", .{record.id}),

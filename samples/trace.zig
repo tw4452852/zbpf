@@ -1,4 +1,3 @@
-const traced_funcs = @import("build_options").traced_funcs;
 const std = @import("std");
 const bpf = @import("bpf");
 const BPF = std.os.linux.BPF;
@@ -7,10 +6,13 @@ const REGS = bpf.Args.REGS;
 const TRACE_RECORD = bpf.Args.TRACE_RECORD;
 const trace_printk = helpers.trace_printk;
 
+const kprobes = @import("build_options").kprobes;
+const syscalls = @import("build_options").syscalls;
+
 var buffer = bpf.Map.HashMap("buffer", u64, REGS, 0xffff, 0).init();
 var events = bpf.Map.RingBuffer("events", 16, 0).init();
 
-fn generate(comptime name: []const u8, comptime id: u32) type {
+fn generate_kprobe(comptime name: []const u8, comptime id: u32) type {
     return struct {
         const tracked_func = bpf.Kprobe{ .name = name };
 
@@ -22,7 +24,7 @@ fn generate(comptime name: []const u8, comptime id: u32) type {
         }
 
         comptime {
-            @export(kprobe_entry, .{ .name = name ++ "_entry" });
+            @export(kprobe_entry, .{ .name = name ++ "_kprobe_entry" });
         }
 
         fn kprobe_exit(regs: *REGS) linksection(tracked_func.exit_section()) callconv(.C) c_long {
@@ -46,13 +48,66 @@ fn generate(comptime name: []const u8, comptime id: u32) type {
         }
 
         comptime {
-            @export(kprobe_exit, .{ .name = name ++ "_exit" });
+            @export(kprobe_exit, .{ .name = name ++ "_kprobe_exit" });
+        }
+    };
+}
+
+fn generate_syscall(comptime name: []const u8, comptime id: u32) type {
+    return struct {
+        const tracked_syscall = bpf.Ksyscall{ .name = name };
+
+        fn syscall_entry(args: *tracked_syscall.Ctx()) linksection(tracked_syscall.entry_section()) callconv(.C) c_long {
+            const tpid = helpers.get_current_pid_tgid();
+
+            buffer.update(.any, tpid, std.mem.zeroes(REGS)) catch return 1;
+            if (buffer.lookup(tpid)) |regs| {
+                regs.arg0_ptr().* = args.arg0() catch return 1;
+                regs.arg1_ptr().* = args.arg1() catch return 1;
+                regs.arg2_ptr().* = args.arg2() catch return 1;
+                regs.arg3_ptr(true).* = args.arg3() catch return 1;
+                regs.arg4_ptr().* = args.arg4() catch return 1;
+            } else return 1;
+
+            return 0;
+        }
+
+        comptime {
+            @export(syscall_entry, .{ .name = name ++ "_syscall_entry" });
+        }
+
+        fn syscall_exit(args: *tracked_syscall.Ctx()) linksection(tracked_syscall.exit_section()) callconv(.C) c_long {
+            const tpid = helpers.get_current_pid_tgid();
+            if (buffer.lookup(tpid)) |v| {
+                const resv = events.reserve(TRACE_RECORD) catch return 2;
+                v.ret_ptr().* = args.ret();
+                resv.data_ptr.* = .{
+                    .id = id,
+                    .tpid = tpid,
+                    .regs = v.*,
+                };
+                resv.commit();
+            } else {
+                const fmt = "exit failed\n";
+                _ = trace_printk(fmt, fmt.len + 1, 0, 0, 0);
+                return 1;
+            }
+
+            return 0;
+        }
+
+        comptime {
+            @export(syscall_exit, .{ .name = name ++ "_syscall_exit" });
         }
     };
 }
 
 comptime {
-    inline for (traced_funcs, 0..) |f, i| {
-        _ = generate(f, i);
+    inline for (kprobes, 0..) |f, i| {
+        _ = generate_kprobe(f, i);
+    }
+
+    inline for (syscalls, kprobes.len..) |f, i| {
+        _ = generate_syscall(f, i);
     }
 }

@@ -314,9 +314,11 @@ pub fn build(b: *Builder) !void {
 
     const build_options = b.addOptions();
     const debugging = if (b.option(bool, "debug", "enable debugging log")) |v| v else false;
-    const traced_funcs = if (b.option([]const []const u8, "trace", "the traced kernel function name")) |v| v else &.{};
+    const kprobes = if (b.option([]const []const u8, "kprobe", "the traced kernel function name")) |v| v else &.{};
+    const syscalls = if (b.option([]const []const u8, "syscall", "the traced syscall name")) |v| v else &.{};
     build_options.addOption(@TypeOf(debugging), "debug", debugging);
-    build_options.addOption(@TypeOf(traced_funcs), "traced_funcs", traced_funcs);
+    build_options.addOption(@TypeOf(kprobes), "kprobes", kprobes);
+    build_options.addOption(@TypeOf(syscalls), "syscalls", syscalls);
 
     const ctx = Ctx{
         .b = b,
