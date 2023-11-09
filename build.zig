@@ -282,6 +282,7 @@ fn create_vmlinux(b: *Builder) *Builder.Module {
         .target = target,
         .optimize = optimize,
     });
+    zigify.addIncludeDir("src/vmlinux_dumper");
     zigify.step.dependOn(&vmlinux_h.step);
     return b.addModule("vmlinux", .{ .source_file = .{ .generated = &zigify.output_file } });
 }

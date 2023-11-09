@@ -73,4 +73,6 @@ pub fn main() !void {
             try funcs.put(try allocator.dupe(u8, func_name), {});
         }
     }
+
+    try std.fmt.format(stdout, "#include <syscalls.h>\n", .{});
 }
