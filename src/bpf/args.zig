@@ -128,25 +128,25 @@ pub inline fn is_pointer(comptime typ: type) bool {
     return ti == .Pointer or (ti == .Optional and @typeInfo(ti.Optional.child) == .Pointer);
 }
 
+pub fn cast(comptime T: type, rc: c_ulong) T {
+    if (is_pointer(T)) return rc;
+
+    const ti = @typeInfo(T);
+    if (ti == .Int) {
+        if (ti.Int.signedness == .signed) {
+            return @truncate(@as(c_long, @bitCast(rc)));
+        }
+        return @truncate(rc);
+    }
+
+    return rc;
+}
+
 pub fn PT_REGS(comptime func_name: []const u8) type {
     const f = @typeInfo(@TypeOf(@field(vmlinux, func_prefix ++ func_name)));
 
     return opaque {
         const Self = @This();
-
-        fn cast(comptime T: type, rc: c_ulong) T {
-            if (is_pointer(T)) return rc;
-
-            const ti = @typeInfo(T);
-            if (ti == .Int) {
-                if (ti.Int.signedness == .signed) {
-                    return @truncate(@as(c_long, @bitCast(rc)));
-                }
-                return @truncate(rc);
-            }
-
-            return rc;
-        }
 
         pub usingnamespace if (f.Fn.params.len < 1) struct {} else struct {
             const RET = f.Fn.params[0].type.?;

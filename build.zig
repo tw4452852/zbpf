@@ -287,10 +287,10 @@ fn create_vmlinux(b: *Builder) *Builder.Module {
     return b.addModule("vmlinux", .{ .source_file = .{ .generated = &zigify.output_file } });
 }
 
-fn create_bpf(b: *Builder) *Builder.Module {
+fn create_bpf(b: *Builder, vmlinux: *Builder.Module) *Builder.Module {
     return b.addModule("bpf", .{
         .source_file = .{ .path = "src/bpf/root.zig" },
-        .dependencies = &.{.{ .name = "vmlinux", .module = create_vmlinux(b) }},
+        .dependencies = &.{.{ .name = "vmlinux", .module = vmlinux }},
     });
 }
 
@@ -298,6 +298,7 @@ const Ctx = struct {
     b: *Builder,
     target: std.zig.CrossTarget,
     optimize: std.builtin.Mode,
+    vmlinux: *Builder.Module,
     bpf: *Builder.Module,
     libbpf_step: *std.build.CompileStep,
     build_options: *std.Build.Step.Options,
@@ -307,11 +308,11 @@ pub fn build(b: *Builder) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // build libbpf
     const libbpf = create_libbpf(b, target, optimize);
 
-    // build bpf package
-    const bpf = create_bpf(b);
+    const vmlinux = create_vmlinux(b);
+
+    const bpf = create_bpf(b, vmlinux);
 
     const build_options = b.addOptions();
     const debugging = if (b.option(bool, "debug", "enable debugging log")) |v| v else false;
@@ -328,6 +329,7 @@ pub fn build(b: *Builder) !void {
         .bpf = bpf,
         .libbpf_step = libbpf,
         .build_options = build_options,
+        .vmlinux = vmlinux,
     };
 
     // default bpf program
@@ -353,6 +355,7 @@ fn create_target_step(ctx: *const Ctx, main_path: []const u8, prog_path: []const
         .source_file = prog.getOutputSource(),
     });
     exe.addModule("bpf", ctx.bpf);
+    exe.addModule("vmlinux", ctx.vmlinux);
     exe.addOptions("build_options", ctx.build_options);
 
     exe.linkLibrary(ctx.libbpf_step);

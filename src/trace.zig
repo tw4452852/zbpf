@@ -4,9 +4,11 @@ const libbpf = @cImport({
     @cInclude("libbpf.h");
 });
 const bpf = @import("bpf");
+const vmlinux = @import("vmlinux");
 const TRACE_RECORD = bpf.Args.TRACE_RECORD;
 const hasFn = std.meta.trait.hasFn;
 const is_pointer = bpf.Args.is_pointer;
+const cast = bpf.Args.cast;
 
 const kprobes = @import("build_options").kprobes;
 const syscalls = @import("build_options").syscalls;
@@ -128,10 +130,42 @@ fn on_sample(_: ?*anyopaque, _data: ?*anyopaque, _: usize) callconv(.C) c_int {
 
         inline kprobes.len...(if (syscalls.len > 0) kprobes.len + syscalls.len - 1 else kprobes.len) => |i| if (syscalls.len > 0) {
             // TODO: get syscall prototype
-            const func_name = syscalls[i - kprobes.len];
+            const name = syscalls[i - kprobes.len];
+            const func_name = "sys_" ++ name;
             const pid: u32 = @truncate(record.tpid);
 
-            print("pid: {}, syscall {s}: arg0: 0x{x}, arg1: 0x{x}, arg2: 0x{x}, arg3: 0x{x}, arg4: 0x{x}, ret: 0x{x}\n", .{ pid, func_name, record.regs.arg0_ptr().*, record.regs.arg1_ptr().*, record.regs.arg2_ptr().*, record.regs.arg3_ptr(true).*, record.regs.arg4_ptr().*, record.regs.ret_ptr().* });
+            if (!@hasDecl(vmlinux, func_name)) {
+                print("can't determine the prototype of syscall {s}, dump all possible arguments w/o type\n", .{name});
+                print("pid: {}, syscall {s}: arg0: 0x{x}, arg1: 0x{x}, arg2: 0x{x}, arg3: 0x{x}, arg4: 0x{x}, ret: 0x{x}\n", .{ pid, name, record.regs.arg0_ptr().*, record.regs.arg1_ptr().*, record.regs.arg2_ptr().*, record.regs.arg3_ptr(true).*, record.regs.arg4_ptr().*, record.regs.ret_ptr().* });
+            } else {
+                const f = @typeInfo(@TypeOf(@field(vmlinux, func_name)));
+                print("pid: {}, syscall {s}: ", .{ pid, name });
+                if (f.Fn.params.len > 0) {
+                    const RET = f.Fn.params[0].type.?;
+                    print("arg0: " ++ (if (is_pointer(RET)) "{any}" else "{}"), .{cast(RET, record.regs.arg0_ptr().*)});
+                }
+                if (f.Fn.params.len > 1) {
+                    const RET = f.Fn.params[1].type.?;
+                    print(", arg1: " ++ (if (is_pointer(RET)) "{any}" else "{}"), .{cast(RET, record.regs.arg1_ptr().*)});
+                }
+                if (f.Fn.params.len > 2) {
+                    const RET = f.Fn.params[2].type.?;
+                    print(", arg2: " ++ (if (is_pointer(RET)) "{any}" else "{}"), .{cast(RET, record.regs.arg2_ptr().*)});
+                }
+                if (f.Fn.params.len > 3) {
+                    const RET = f.Fn.params[3].type.?;
+                    print(", arg3: " ++ (if (is_pointer(RET)) "{any}" else "{}"), .{cast(RET, record.regs.arg3_ptr().*)});
+                }
+                if (f.Fn.params.len > 4) {
+                    const RET = f.Fn.params[4].type.?;
+                    print(", arg4: " ++ (if (is_pointer(RET)) "{any}" else "{}"), .{cast(RET, record.regs.arg4_ptr().*)});
+                }
+                if (f.Fn.return_type.? != void) {
+                    const RET = f.Fn.return_type.?;
+                    print(", ret: " ++ (if (is_pointer(RET)) "{any}" else "{}"), .{cast(RET, record.regs.ret_ptr().*)});
+                }
+                print("\n", .{});
+            }
         },
 
         else => print("Unknown function id: {}\n", .{record.id}),
