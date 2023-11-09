@@ -85,7 +85,7 @@ fn on_sample(_: ?*anyopaque, _data: ?*anyopaque, _: usize) callconv(.C) c_int {
 
     // kprobes at first, then syscalls
     switch (record.id) {
-        inline 0...kprobes.len - 1 => |i| {
+        inline 0...(if (kprobes.len > 0) kprobes.len - 1 else 0) => |i| if (kprobes.len > 0) {
             const func_name = kprobes[i];
             const tracked_func = bpf.Kprobe{ .name = func_name };
             const T = tracked_func.Ctx();
@@ -126,7 +126,7 @@ fn on_sample(_: ?*anyopaque, _data: ?*anyopaque, _: usize) callconv(.C) c_int {
             print("\n", .{});
         },
 
-        inline kprobes.len...kprobes.len + syscalls.len - 1 => |i| {
+        inline kprobes.len...(if (syscalls.len > 0) kprobes.len + syscalls.len - 1 else kprobes.len) => |i| if (syscalls.len > 0) {
             // TODO: get syscall prototype
             const func_name = syscalls[i - kprobes.len];
             const pid: u32 = @truncate(record.tpid);
