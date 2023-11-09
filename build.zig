@@ -334,7 +334,7 @@ pub fn build(b: *Builder) !void {
     const exe_src = if (b.option([]const u8, "main", "main executable source path")) |v| v else "src/hello.zig";
     try create_target_step(&ctx, exe_src, bpf_src, null);
 
-    try create_target_step(&ctx, "src/trace.zig", "samples/trace.zig", "trace");
+    try create_target_step(&ctx, "src/trace.zig", "src/trace.bpf.zig", "trace");
 
     try create_test_step(&ctx);
 }
