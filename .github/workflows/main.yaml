@@ -16,6 +16,7 @@ jobs:
       - run: uname -a
       - run: zig build test
       - run: sudo ./zig-out/bin/test
+      - run: sh .github/workflows/build_check_trace.sh
   lint:
     runs-on: ubuntu-latest
     steps:
