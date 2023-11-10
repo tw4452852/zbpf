@@ -43,22 +43,23 @@ test "kprobe" {
     defer _ = libbpf.bpf_link__destroy(exit_link);
 
     var buf: [64]u8 = undefined;
-    const n = std.os.linux.listxattr("/nonexist", &buf, buf.len);
+    const arg0 = "/nonexist";
+    const n = std.os.linux.listxattr(arg0, &buf, buf.len);
 
     const k: u32 = 0;
-    var got_arg2: u64 = undefined;
-    ret = libbpf.bpf_map__lookup_elem(arg2, &k, @sizeOf(@TypeOf(k)), &got_arg2, @sizeOf(@TypeOf(got_arg2)), 0);
+    var got_entry: u64 = undefined;
+    ret = libbpf.bpf_map__lookup_elem(arg2, &k, @sizeOf(@TypeOf(k)), &got_entry, @sizeOf(@TypeOf(got_entry)), 0);
     if (ret != 0) {
         print("failed loopup map element: {}\n", .{std.os.errno(-1)});
         return error.MAP_LOOKUP;
     }
-    var got_ret: usize = undefined;
+    var got_ret: isize = undefined;
     ret = libbpf.bpf_map__lookup_elem(rc, &k, @sizeOf(@TypeOf(k)), &got_ret, @sizeOf(@TypeOf(got_ret)), 0);
     if (ret != 0) {
         print("failed loopup map element: {}\n", .{std.os.errno(-1)});
         return error.MAP_LOOKUP;
     }
 
-    try testing.expectEqual(buf.len, got_arg2);
-    try testing.expectEqual(n, got_ret);
+    try testing.expectEqual(@intFromPtr(arg0.ptr) + @intFromPtr(&buf) + buf.len, got_entry);
+    try testing.expectEqual(@as(isize, @bitCast(n)), got_ret);
 }

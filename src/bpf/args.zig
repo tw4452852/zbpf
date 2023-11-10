@@ -129,7 +129,7 @@ pub inline fn is_pointer(comptime typ: type) bool {
 }
 
 pub fn cast(comptime T: type, rc: c_ulong) T {
-    if (is_pointer(T)) return rc;
+    if (is_pointer(T)) return @ptrFromInt(rc);
 
     const ti = @typeInfo(T);
     if (ti == .Int) {
@@ -142,8 +142,8 @@ pub fn cast(comptime T: type, rc: c_ulong) T {
     return rc;
 }
 
-pub fn PT_REGS(comptime func_name: []const u8) type {
-    const f = @typeInfo(@TypeOf(@field(vmlinux, func_prefix ++ func_name)));
+pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type {
+    const f = @typeInfo(@TypeOf(@field(vmlinux, func_name)));
 
     return opaque {
         const Self = @This();
@@ -151,122 +151,137 @@ pub fn PT_REGS(comptime func_name: []const u8) type {
         pub usingnamespace if (f.Fn.params.len < 1) struct {} else struct {
             const RET = f.Fn.params[0].type.?;
 
-            pub fn arg0(self: *Self) RET {
-                const rc = @as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*;
-                return cast(RET, rc);
+            pub fn arg0(self: *Self) !RET {
+                var ret: RET = undefined;
+                const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), @as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr());
+                return if (err != 0) error.READ_KERN else ret;
             }
         };
 
         pub usingnamespace if (f.Fn.params.len < 2) struct {} else struct {
             const RET = f.Fn.params[1].type.?;
 
-            pub fn arg1(self: *Self) RET {
-                const rc = @as(*REGS, @alignCast(@ptrCast(self))).arg1_ptr().*;
-                return cast(RET, rc);
+            pub fn arg1(self: *Self) !RET {
+                var ret: RET = undefined;
+                const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), @as(*REGS, @alignCast(@ptrCast(self))).arg1_ptr());
+                return if (err != 0) error.READ_KERN else ret;
             }
         };
 
         pub usingnamespace if (f.Fn.params.len < 3) struct {} else struct {
             const RET = f.Fn.params[2].type.?;
 
-            pub fn arg2(self: *Self) RET {
-                const rc = @as(*REGS, @alignCast(@ptrCast(self))).arg2_ptr().*;
-                return cast(RET, rc);
+            pub fn arg2(self: *Self) !RET {
+                var ret: RET = undefined;
+                const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), @as(*REGS, @alignCast(@ptrCast(self))).arg2_ptr());
+                return if (err != 0) error.READ_KERN else ret;
             }
         };
 
         pub usingnamespace if (f.Fn.params.len < 4) struct {} else struct {
             const RET = f.Fn.params[3].type.?;
 
-            pub fn arg3(self: *Self) RET {
-                const rc = @as(*REGS, @alignCast(@ptrCast(self))).arg3_ptr(false).*;
-                return cast(RET, rc);
+            pub fn arg3(self: *Self) !RET {
+                var ret: RET = undefined;
+                const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), @as(*REGS, @alignCast(@ptrCast(self))).arg3_ptr(for_syscall));
+                return if (err != 0) error.READ_KERN else ret;
             }
         };
 
         pub usingnamespace if (f.Fn.params.len < 5) struct {} else struct {
             const RET = f.Fn.params[4].type.?;
 
-            pub fn arg4(self: *Self) RET {
-                const rc = @as(*REGS, @alignCast(@ptrCast(self))).arg4_ptr().*;
-                return cast(RET, rc);
+            pub fn arg4(self: *Self) !RET {
+                var ret: RET = undefined;
+                const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), @as(*REGS, @alignCast(@ptrCast(self))).arg4_ptr());
+                return if (err != 0) error.READ_KERN else ret;
             }
         };
 
         pub usingnamespace if (f.Fn.return_type.? == void) struct {} else struct {
             const RET = f.Fn.return_type.?;
 
-            pub fn ret(self: *Self) RET {
-                const rc = @as(*REGS, @alignCast(@ptrCast(self))).ret_ptr().*;
-                return cast(RET, rc);
+            pub fn ret(self: *Self) !RET {
+                var v: RET = undefined;
+                const err = helpers.probe_read_kernel(@ptrCast(&v), @sizeOf(RET), @as(*REGS, @alignCast(@ptrCast(self))).ret_ptr());
+                return if (err != 0) error.READ_KERN else v;
             }
         };
     };
 }
 
 pub fn SYSCALL(comptime name: []const u8) type {
-    const sys_prefix = switch (arch) {
-        .x86_64 => "__x64_sys_",
-        .x86 => "__ia32_sys_",
-        .aarch64 => "__arm64_sys_",
-        .arm => "__arm_sys_",
-        else => {},
-    };
-
-    if (!@hasDecl(vmlinux, func_prefix ++ sys_prefix ++ name))
-        @compileError(std.fmt.comptimePrint("can't determine the actual function name for syscall {s} on {}", .{ name, arch }));
+    const func_name = "sys_" ++ name;
+    if (!@hasDecl(vmlinux, func_name))
+        @compileError(std.fmt.comptimePrint("can't get function prototype for syscall {s} on {}", .{ name, arch }));
+    const f = @typeInfo(@TypeOf(@field(vmlinux, func_name)));
+    const T = PT_REGS(func_name, true);
 
     return opaque {
         const Self = @This();
 
-        pub fn arg0(self: *Self) !c_ulong {
-            if (LINUX_HAS_SYSCALL_WRAPPER) {
-                const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
-                var d: c_ulong = undefined;
-                const r = helpers.probe_read_kernel(&d, @sizeOf(c_ulong), ctx.arg0_ptr());
-                return if (r != 0) error.READ_KERN else d;
-            } else return @as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*;
-        }
+        pub usingnamespace if (f.Fn.params.len < 1) struct {} else struct {
+            const RET = f.Fn.params[0].type.?;
 
-        pub fn arg1(self: *Self) !c_ulong {
-            if (LINUX_HAS_SYSCALL_WRAPPER) {
-                const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
-                var d: c_ulong = undefined;
-                const r = helpers.probe_read_kernel(&d, @sizeOf(c_ulong), ctx.arg1_ptr());
-                return if (r != 0) error.READ_KERN else d;
-            } else return @as(*REGS, @alignCast(@ptrCast(self))).arg1_ptr().*;
-        }
+            pub fn arg0(self: *Self) !RET {
+                if (LINUX_HAS_SYSCALL_WRAPPER) {
+                    const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
+                    return @as(*T, @ptrCast(ctx)).arg0();
+                } else return @as(*T, @ptrCast(self)).arg0();
+            }
+        };
 
-        pub fn arg2(self: *Self) !c_ulong {
-            if (LINUX_HAS_SYSCALL_WRAPPER) {
-                const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
-                var d: c_ulong = undefined;
-                const r = helpers.probe_read_kernel(&d, @sizeOf(c_ulong), ctx.arg2_ptr());
-                return if (r != 0) error.READ_KERN else d;
-            } else return @as(*REGS, @alignCast(@ptrCast(self))).arg2_ptr().*;
-        }
+        pub usingnamespace if (f.Fn.params.len < 2) struct {} else struct {
+            const RET = f.Fn.params[1].type.?;
 
-        pub fn arg3(self: *Self) !c_ulong {
-            if (LINUX_HAS_SYSCALL_WRAPPER) {
-                const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
-                var d: c_ulong = undefined;
-                const r = helpers.probe_read_kernel(&d, @sizeOf(c_ulong), ctx.arg3_ptr(true));
-                return if (r != 0) error.READ_KERN else d;
-            } else return @as(*REGS, @alignCast(@ptrCast(self))).arg3_ptr(true).*;
-        }
+            pub fn arg1(self: *Self) !RET {
+                if (LINUX_HAS_SYSCALL_WRAPPER) {
+                    const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
+                    return @as(*T, @ptrCast(ctx)).arg1();
+                } else return @as(*T, @ptrCast(self)).arg1();
+            }
+        };
 
-        pub fn arg4(self: *Self) !c_ulong {
-            if (LINUX_HAS_SYSCALL_WRAPPER) {
-                const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
-                var d: c_ulong = undefined;
-                const r = helpers.probe_read_kernel(&d, @sizeOf(c_ulong), ctx.arg4_ptr());
-                return if (r != 0) error.READ_KERN else d;
-            } else return @as(*REGS, @alignCast(@ptrCast(self))).arg4_ptr().*;
-        }
+        pub usingnamespace if (f.Fn.params.len < 3) struct {} else struct {
+            const RET = f.Fn.params[2].type.?;
 
-        pub fn ret(self: *Self) c_ulong {
-            return @as(*REGS, @alignCast(@ptrCast(self))).ret_ptr().*;
-        }
+            pub fn arg2(self: *Self) !RET {
+                if (LINUX_HAS_SYSCALL_WRAPPER) {
+                    const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
+                    return @as(*T, @ptrCast(ctx)).arg2();
+                } else return @as(*T, @ptrCast(self)).arg2();
+            }
+        };
+
+        pub usingnamespace if (f.Fn.params.len < 4) struct {} else struct {
+            const RET = f.Fn.params[3].type.?;
+
+            pub fn arg3(self: *Self) !RET {
+                if (LINUX_HAS_SYSCALL_WRAPPER) {
+                    const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
+                    return @as(*T, @ptrCast(ctx)).arg3();
+                } else return @as(*T, @ptrCast(self)).arg3();
+            }
+        };
+
+        pub usingnamespace if (f.Fn.params.len < 5) struct {} else struct {
+            const RET = f.Fn.params[4].type.?;
+
+            pub fn arg4(self: *Self) !RET {
+                if (LINUX_HAS_SYSCALL_WRAPPER) {
+                    const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
+                    return @as(*T, @ptrCast(ctx)).arg4();
+                } else return @as(*T, @ptrCast(self)).arg4();
+            }
+        };
+
+        pub usingnamespace if (f.Fn.return_type.? == void) struct {} else struct {
+            const RET = f.Fn.return_type.?;
+
+            pub fn ret(self: *Self) !RET {
+                return @as(*T, @ptrCast(self)).ret();
+            }
+        };
     };
 }
 

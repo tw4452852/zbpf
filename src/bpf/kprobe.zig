@@ -13,5 +13,5 @@ pub fn exit_section(comptime self: Self) []const u8 {
 }
 
 pub fn Ctx(comptime self: Self) type {
-    return Args.PT_REGS(self.name);
+    return Args.PT_REGS("_zig_" ++ self.name, false);
 }
