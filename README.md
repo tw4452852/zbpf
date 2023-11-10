@@ -1,5 +1,5 @@
 # zbpf
-Writing eBPF in Zig.
+Writing eBPF in Zig. Thanks to Zig's comptime and BTF, we can equip eBPF with strong type system both at comptime and runtime!
 
 ## Prerequisite
 
