@@ -21,6 +21,24 @@ to extract BTF from it, otherwise, current kernel's BTF will be used.
 That's all! The generated binary is located at `./zig-out/bin/zbpf`,
 feel free to run it on your target machine.
 
+## Tools/trace
+
+`trace` is a tool built on top of `zbpf` framework to trace kernel functions and syscalls.
+It's heavily inspired by [retsnoop](https://github.com/anakryiko/retsnoop).
+One improvement I made (which is also what I feel when using retsnoop) is that `trace` support
+show parameters according its type (thanks to the Zig type system).
+This is very helpful when debugging linux kernel. For more details.
+For more details, you could check the implementation: [BPF side](https://github.com/tw4452852/zbpf/blob/main/src/trace.bpf.zig)
+and [userspace](https://github.com/tw4452852/zbpf/blob/main/src/trace.zig).
+
+You could specify the kernel functions you want to trace with: `zbpf build trace -Dkprobe=<kernel_function_name> -Dkprobe=...`
+And for system calls: `zbpf build trace -Dsyscall=<syscall_name> -Dsyscall=...`.
+You could even mix them.
+
+And here's a quick demo:
+
+[![asciicast](https://asciinema.org/a/620205.svg)](https://asciinema.org/a/620205)
+
 ## Samples
 
 For each supported feature, we have the corresponding unit test.
