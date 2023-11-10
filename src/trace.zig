@@ -54,9 +54,13 @@ pub fn main() !void {
         });
     }
 
+    var ctx: Ctx = .{
+        .stdout = std.io.getStdOut().writer(),
+    };
+
     // setup events ring buffer
     const events = libbpf.bpf_object__find_map_by_name(obj, "events").?;
-    const ring_buf = libbpf.ring_buffer__new(libbpf.bpf_map__fd(events), on_sample, null, null).?;
+    const ring_buf = libbpf.ring_buffer__new(libbpf.bpf_map__fd(events), on_sample, &ctx, null).?;
     defer libbpf.ring_buffer__free(ring_buf);
 
     try setup_ctrl_c();
@@ -82,8 +86,13 @@ fn setup_ctrl_c() !void {
     try std.os.sigaction(std.os.SIG.INT, &act, null);
 }
 
-fn on_sample(_: ?*anyopaque, _data: ?*anyopaque, _: usize) callconv(.C) c_int {
-    const record: *TRACE_RECORD = @alignCast(@ptrCast(_data.?));
+const Ctx = struct {
+    stdout: std.fs.File.Writer,
+};
+
+fn on_sample(_ctx: ?*anyopaque, data: ?*anyopaque, _: usize) callconv(.C) c_int {
+    const ctx: *Ctx = @alignCast(@ptrCast(_ctx));
+    const record: *TRACE_RECORD = @alignCast(@ptrCast(data.?));
 
     // kprobes at first, then syscalls
     switch (record.id) {
@@ -92,44 +101,44 @@ fn on_sample(_: ?*anyopaque, _data: ?*anyopaque, _: usize) callconv(.C) c_int {
             const func_name = if (for_kprobe) kprobes[i] else syscalls[i - kprobes.len];
             const tracked_func = if (for_kprobe) bpf.Kprobe{ .name = func_name } else bpf.Ksyscall{ .name = func_name };
             const T = tracked_func.Ctx();
-            const ctx: *T = @ptrCast(&record.regs);
+            const args: *T = @ptrCast(&record.regs);
             const pid: u32 = @truncate(record.tpid);
 
-            print("pid: {}, {s} {s}: ", .{ pid, if (for_kprobe) "kprobe" else "syscall", func_name });
+            ctx.stdout.print("pid: {}, {s} {s}: ", .{ pid, if (for_kprobe) "kprobe" else "syscall", func_name }) catch return -1;
             if (comptime hasFn("arg0")(T)) {
-                const v = ctx.arg0() catch unreachable;
+                const v = args.arg0() catch unreachable;
 
-                print("arg0: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v});
+                ctx.stdout.print("arg0: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
             }
             if (comptime hasFn("arg1")(T)) {
-                const v = ctx.arg1() catch unreachable;
+                const v = args.arg1() catch unreachable;
 
-                print(", arg1: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v});
+                ctx.stdout.print(", arg1: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
             }
             if (comptime hasFn("arg2")(T)) {
-                const v = ctx.arg2() catch unreachable;
+                const v = args.arg2() catch unreachable;
 
-                print(", arg2: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v});
+                ctx.stdout.print(", arg2: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
             }
             if (comptime hasFn("arg3")(T)) {
-                const v = ctx.arg3() catch unreachable;
+                const v = args.arg3() catch unreachable;
 
-                print(", arg3: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v});
+                ctx.stdout.print(", arg3: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
             }
             if (comptime hasFn("arg4")(T)) {
-                const v = ctx.arg4() catch unreachable;
+                const v = args.arg4() catch unreachable;
 
-                print("arg4: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v});
+                ctx.stdout.print("arg4: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
             }
             if (comptime hasFn("ret")(T)) {
-                const v = ctx.ret() catch unreachable;
+                const v = args.ret() catch unreachable;
 
-                print(", ret: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v});
+                ctx.stdout.print(", ret: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
             }
-            print("\n", .{});
+            ctx.stdout.print("\n", .{}) catch return -1;
         },
 
-        else => print("Unknown function id: {}\n", .{record.id}),
+        else => ctx.stdout.print("Unknown function id: {}\n", .{record.id}) catch return -1,
     }
 
     return 0;
