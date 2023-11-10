@@ -1,4 +1,6 @@
+const std = @import("std");
 const Args = @import("args.zig");
+const vmlinux = @import("vmlinux");
 
 name: []const u8,
 
@@ -13,5 +15,9 @@ pub fn exit_section(comptime self: Self) []const u8 {
 }
 
 pub fn Ctx(comptime self: Self) type {
-    return Args.PT_REGS("_zig_" ++ self.name, false);
+    const func_name = "_zig_" ++ self.name;
+    if (!@hasDecl(vmlinux, func_name))
+        @compileError(std.fmt.comptimePrint("can't get function prototype for kernel function {s}", .{self.name}));
+
+    return Args.PT_REGS(func_name, false);
 }
