@@ -87,85 +87,46 @@ fn on_sample(_: ?*anyopaque, _data: ?*anyopaque, _: usize) callconv(.C) c_int {
 
     // kprobes at first, then syscalls
     switch (record.id) {
-        inline 0...(if (kprobes.len > 0) kprobes.len - 1 else 0) => |i| if (kprobes.len > 0) {
-            const func_name = kprobes[i];
-            const tracked_func = bpf.Kprobe{ .name = func_name };
+        inline 0...kprobes.len + syscalls.len - 1 => |i| {
+            const for_kprobe = i < kprobes.len;
+            const func_name = if (for_kprobe) kprobes[i] else syscalls[i - kprobes.len];
+            const tracked_func = if (for_kprobe) bpf.Kprobe{ .name = func_name } else bpf.Ksyscall{ .name = func_name };
             const T = tracked_func.Ctx();
             const ctx: *T = @ptrCast(&record.regs);
             const pid: u32 = @truncate(record.tpid);
 
-            print("pid: {}, kprobe {s}: ", .{ pid, func_name });
+            print("pid: {}, {s} {s}: ", .{ pid, if (for_kprobe) "kprobe" else "syscall", func_name });
             if (comptime hasFn("arg0")(T)) {
-                const v = ctx.arg0();
+                const v = ctx.arg0() catch unreachable;
 
                 print("arg0: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v});
             }
             if (comptime hasFn("arg1")(T)) {
-                const v = ctx.arg1();
+                const v = ctx.arg1() catch unreachable;
 
                 print(", arg1: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v});
             }
             if (comptime hasFn("arg2")(T)) {
-                const v = ctx.arg2();
+                const v = ctx.arg2() catch unreachable;
 
                 print(", arg2: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v});
             }
             if (comptime hasFn("arg3")(T)) {
-                const v = ctx.arg3();
+                const v = ctx.arg3() catch unreachable;
 
                 print(", arg3: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v});
             }
             if (comptime hasFn("arg4")(T)) {
-                const v = ctx.arg4();
+                const v = ctx.arg4() catch unreachable;
 
                 print("arg4: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v});
             }
             if (comptime hasFn("ret")(T)) {
-                const v = ctx.ret();
+                const v = ctx.ret() catch unreachable;
 
                 print(", ret: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v});
             }
             print("\n", .{});
-        },
-
-        inline kprobes.len...(if (syscalls.len > 0) kprobes.len + syscalls.len - 1 else kprobes.len) => |i| if (syscalls.len > 0) {
-            // TODO: get syscall prototype
-            const name = syscalls[i - kprobes.len];
-            const func_name = "sys_" ++ name;
-            const pid: u32 = @truncate(record.tpid);
-
-            if (!@hasDecl(vmlinux, func_name)) {
-                print("can't determine the prototype of syscall {s}, dump all possible arguments w/o type\n", .{name});
-                print("pid: {}, syscall {s}: arg0: 0x{x}, arg1: 0x{x}, arg2: 0x{x}, arg3: 0x{x}, arg4: 0x{x}, ret: 0x{x}\n", .{ pid, name, record.regs.arg0_ptr().*, record.regs.arg1_ptr().*, record.regs.arg2_ptr().*, record.regs.arg3_ptr(true).*, record.regs.arg4_ptr().*, record.regs.ret_ptr().* });
-            } else {
-                const f = @typeInfo(@TypeOf(@field(vmlinux, func_name)));
-                print("pid: {}, syscall {s}: ", .{ pid, name });
-                if (f.Fn.params.len > 0) {
-                    const RET = f.Fn.params[0].type.?;
-                    print("arg0: " ++ (if (is_pointer(RET)) "{any}" else "{}"), .{cast(RET, record.regs.arg0_ptr().*)});
-                }
-                if (f.Fn.params.len > 1) {
-                    const RET = f.Fn.params[1].type.?;
-                    print(", arg1: " ++ (if (is_pointer(RET)) "{any}" else "{}"), .{cast(RET, record.regs.arg1_ptr().*)});
-                }
-                if (f.Fn.params.len > 2) {
-                    const RET = f.Fn.params[2].type.?;
-                    print(", arg2: " ++ (if (is_pointer(RET)) "{any}" else "{}"), .{cast(RET, record.regs.arg2_ptr().*)});
-                }
-                if (f.Fn.params.len > 3) {
-                    const RET = f.Fn.params[3].type.?;
-                    print(", arg3: " ++ (if (is_pointer(RET)) "{any}" else "{}"), .{cast(RET, record.regs.arg3_ptr().*)});
-                }
-                if (f.Fn.params.len > 4) {
-                    const RET = f.Fn.params[4].type.?;
-                    print(", arg4: " ++ (if (is_pointer(RET)) "{any}" else "{}"), .{cast(RET, record.regs.arg4_ptr().*)});
-                }
-                if (f.Fn.return_type.? != void) {
-                    const RET = f.Fn.return_type.?;
-                    print(", ret: " ++ (if (is_pointer(RET)) "{any}" else "{}"), .{cast(RET, record.regs.ret_ptr().*)});
-                }
-                print("\n", .{});
-            }
         },
 
         else => print("Unknown function id: {}\n", .{record.id}),

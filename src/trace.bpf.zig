@@ -61,12 +61,9 @@ fn generate_syscall(comptime name: []const u8, comptime id: u32) type {
             const tpid = helpers.get_current_pid_tgid();
 
             buffer.update(.any, tpid, std.mem.zeroes(REGS)) catch return 1;
-            if (buffer.lookup(tpid)) |regs| {
-                regs.arg0_ptr().* = args.arg0() catch return 1;
-                regs.arg1_ptr().* = args.arg1() catch return 1;
-                regs.arg2_ptr().* = args.arg2() catch return 1;
-                regs.arg3_ptr(true).* = args.arg3() catch return 1;
-                regs.arg4_ptr().* = args.arg4() catch return 1;
+            if (buffer.lookup(tpid)) |v| {
+                const err = helpers.probe_read_kernel(v, @sizeOf(REGS), args.get_arg_ctx().get_regs());
+                if (err != 0) return 1;
             } else return 1;
 
             return 0;
@@ -79,8 +76,9 @@ fn generate_syscall(comptime name: []const u8, comptime id: u32) type {
         fn syscall_exit(args: *tracked_syscall.Ctx()) linksection(tracked_syscall.exit_section()) callconv(.C) c_long {
             const tpid = helpers.get_current_pid_tgid();
             if (buffer.lookup(tpid)) |v| {
+                const ret = args.ret() catch return 1;
                 const resv = events.reserve(TRACE_RECORD) catch return 2;
-                v.ret_ptr().* = args.ret();
+                v.ret_ptr().* = @bitCast(ret);
                 resv.data_ptr.* = .{
                     .id = id,
                     .tpid = tpid,

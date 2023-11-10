@@ -18,6 +18,11 @@ else if (@hasDecl(vmlinux, func_prefix ++ "__arm_sys_write"))
 else
     @compileError(std.fmt.comptimePrint("unknown arch", .{}));
 
+const in_bpf_program = switch (@import("builtin").cpu.arch) {
+    .bpfel, .bpfeb => true,
+    else => false,
+};
+
 pub fn Ctx(comptime func_name: []const u8) type {
     const f = @typeInfo(@TypeOf(@field(vmlinux, "_zig_" ++ func_name)));
     comptime var fields: []const StructField = &.{};
@@ -148,13 +153,21 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
     return opaque {
         const Self = @This();
 
+        pub inline fn get_regs(self: *Self) *REGS {
+            return @alignCast(@ptrCast(self));
+        }
+
         pub usingnamespace if (f.Fn.params.len < 1) struct {} else struct {
             const RET = f.Fn.params[0].type.?;
 
             pub fn arg0(self: *Self) !RET {
-                var ret: RET = undefined;
-                const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), @as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr());
-                return if (err != 0) error.READ_KERN else ret;
+                if (!in_bpf_program) {
+                    return cast(RET, self.get_regs().arg0_ptr().*);
+                } else {
+                    var ret: RET = undefined;
+                    const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg0_ptr());
+                    return if (err != 0) error.READ_KERN else ret;
+                }
             }
         };
 
@@ -162,9 +175,13 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
             const RET = f.Fn.params[1].type.?;
 
             pub fn arg1(self: *Self) !RET {
-                var ret: RET = undefined;
-                const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), @as(*REGS, @alignCast(@ptrCast(self))).arg1_ptr());
-                return if (err != 0) error.READ_KERN else ret;
+                if (!in_bpf_program) {
+                    return cast(RET, self.get_regs().arg1_ptr().*);
+                } else {
+                    var ret: RET = undefined;
+                    const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg1_ptr());
+                    return if (err != 0) error.READ_KERN else ret;
+                }
             }
         };
 
@@ -172,9 +189,13 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
             const RET = f.Fn.params[2].type.?;
 
             pub fn arg2(self: *Self) !RET {
-                var ret: RET = undefined;
-                const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), @as(*REGS, @alignCast(@ptrCast(self))).arg2_ptr());
-                return if (err != 0) error.READ_KERN else ret;
+                if (!in_bpf_program) {
+                    return cast(RET, self.get_regs().arg2_ptr().*);
+                } else {
+                    var ret: RET = undefined;
+                    const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg2_ptr());
+                    return if (err != 0) error.READ_KERN else ret;
+                }
             }
         };
 
@@ -182,9 +203,13 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
             const RET = f.Fn.params[3].type.?;
 
             pub fn arg3(self: *Self) !RET {
-                var ret: RET = undefined;
-                const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), @as(*REGS, @alignCast(@ptrCast(self))).arg3_ptr(for_syscall));
-                return if (err != 0) error.READ_KERN else ret;
+                if (!in_bpf_program) {
+                    return cast(RET, self.get_regs().arg3_ptr(for_syscall).*);
+                } else {
+                    var ret: RET = undefined;
+                    const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg3_ptr(for_syscall));
+                    return if (err != 0) error.READ_KERN else ret;
+                }
             }
         };
 
@@ -192,9 +217,13 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
             const RET = f.Fn.params[4].type.?;
 
             pub fn arg4(self: *Self) !RET {
-                var ret: RET = undefined;
-                const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), @as(*REGS, @alignCast(@ptrCast(self))).arg4_ptr());
-                return if (err != 0) error.READ_KERN else ret;
+                if (!in_bpf_program) {
+                    return cast(RET, self.get_regs().arg4_ptr().*);
+                } else {
+                    var ret: RET = undefined;
+                    const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg4_ptr());
+                    return if (err != 0) error.READ_KERN else ret;
+                }
             }
         };
 
@@ -202,9 +231,13 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
             const RET = f.Fn.return_type.?;
 
             pub fn ret(self: *Self) !RET {
-                var v: RET = undefined;
-                const err = helpers.probe_read_kernel(@ptrCast(&v), @sizeOf(RET), @as(*REGS, @alignCast(@ptrCast(self))).ret_ptr());
-                return if (err != 0) error.READ_KERN else v;
+                if (!in_bpf_program) {
+                    return cast(RET, self.get_regs().ret_ptr().*);
+                } else {
+                    var v: RET = undefined;
+                    const err = helpers.probe_read_kernel(@ptrCast(&v), @sizeOf(RET), self.get_regs().ret_ptr());
+                    return if (err != 0) error.READ_KERN else v;
+                }
             }
         };
     };
@@ -220,14 +253,20 @@ pub fn SYSCALL(comptime name: []const u8) type {
     return opaque {
         const Self = @This();
 
+        pub inline fn get_arg_ctx(self: *Self) *T {
+            if (!in_bpf_program) return @ptrCast(self);
+
+            return if (LINUX_HAS_SYSCALL_WRAPPER)
+                @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*)
+            else
+                @ptrCast(self);
+        }
+
         pub usingnamespace if (f.Fn.params.len < 1) struct {} else struct {
             const RET = f.Fn.params[0].type.?;
 
             pub fn arg0(self: *Self) !RET {
-                if (LINUX_HAS_SYSCALL_WRAPPER) {
-                    const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
-                    return @as(*T, @ptrCast(ctx)).arg0();
-                } else return @as(*T, @ptrCast(self)).arg0();
+                return self.get_arg_ctx().arg0();
             }
         };
 
@@ -235,10 +274,7 @@ pub fn SYSCALL(comptime name: []const u8) type {
             const RET = f.Fn.params[1].type.?;
 
             pub fn arg1(self: *Self) !RET {
-                if (LINUX_HAS_SYSCALL_WRAPPER) {
-                    const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
-                    return @as(*T, @ptrCast(ctx)).arg1();
-                } else return @as(*T, @ptrCast(self)).arg1();
+                return self.get_arg_ctx().arg1();
             }
         };
 
@@ -246,10 +282,7 @@ pub fn SYSCALL(comptime name: []const u8) type {
             const RET = f.Fn.params[2].type.?;
 
             pub fn arg2(self: *Self) !RET {
-                if (LINUX_HAS_SYSCALL_WRAPPER) {
-                    const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
-                    return @as(*T, @ptrCast(ctx)).arg2();
-                } else return @as(*T, @ptrCast(self)).arg2();
+                return self.get_arg_ctx().arg2();
             }
         };
 
@@ -257,10 +290,7 @@ pub fn SYSCALL(comptime name: []const u8) type {
             const RET = f.Fn.params[3].type.?;
 
             pub fn arg3(self: *Self) !RET {
-                if (LINUX_HAS_SYSCALL_WRAPPER) {
-                    const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
-                    return @as(*T, @ptrCast(ctx)).arg3();
-                } else return @as(*T, @ptrCast(self)).arg3();
+                return self.get_arg_ctx().arg3();
             }
         };
 
@@ -268,10 +298,7 @@ pub fn SYSCALL(comptime name: []const u8) type {
             const RET = f.Fn.params[4].type.?;
 
             pub fn arg4(self: *Self) !RET {
-                if (LINUX_HAS_SYSCALL_WRAPPER) {
-                    const ctx: *REGS = @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*);
-                    return @as(*T, @ptrCast(ctx)).arg4();
-                } else return @as(*T, @ptrCast(self)).arg4();
+                return self.get_arg_ctx().arg4();
             }
         };
 
