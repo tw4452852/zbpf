@@ -33,4 +33,5 @@ test {
     _ = @import("kprobe.zig");
     _ = @import("kmulprobe.zig");
     _ = @import("ksyscall.zig");
+    _ = @import("xdp_ping.zig");
 }

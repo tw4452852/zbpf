@@ -27,9 +27,9 @@ feel free to run it on your target machine.
 It's heavily inspired by [retsnoop](https://github.com/anakryiko/retsnoop).
 One improvement I made (which is also what I feel when using retsnoop) is that `trace` support
 show parameters according its type (thanks to the Zig type system).
-This is very helpful when debugging linux kernel. For more details.
+This is very helpful when debugging linux kernel.
 For more details, you could check the implementation: [BPF side](https://github.com/tw4452852/zbpf/blob/main/src/trace.bpf.zig)
-and [userspace](https://github.com/tw4452852/zbpf/blob/main/src/trace.zig).
+and [Host side](https://github.com/tw4452852/zbpf/blob/main/src/trace.zig).
 
 You could specify the kernel functions you want to trace with: `zbpf build trace -Dkprobe=<kernel_function_name> -Dkprobe=...`
 And for system calls: `zbpf build trace -Dsyscall=<syscall_name> -Dsyscall=...`.
@@ -57,5 +57,6 @@ iterator | [source](samples/iterator.zig) | [source](src/tests/iterator.zig)
 fentry | [source](samples/fentry.zig) | [source](src/tests/fentry.zig)
 kprobe | [source](samples/kprobe.zig) | [source](src/tests/kprobe.zig)
 kmulprobe | [source](samples/kmulprobe.zig) | [source](src/tests/kmulprobe.zig)
+xdp ping | [source](samples/xdp_ping.zig) | [source](src/tests/xdp_ping.zig)
 
 **Have fun!**

@@ -1,0 +1,75 @@
+const std = @import("std");
+const root = @import("root.zig");
+const print = std.debug.print;
+const testing = std.testing;
+const allocator = root.allocator;
+const libbpf = root.libbpf;
+const c = @cImport({
+    @cInclude("net/if.h");
+    @cInclude("linux/if_link.h");
+});
+
+test "xdp_ping" {
+    const obj_bytes = @embedFile("@xdp_ping");
+    const bytes = try allocator.dupe(u8, obj_bytes);
+    defer allocator.free(bytes);
+
+    _ = libbpf.libbpf_set_print(root.dbg_printf);
+
+    const obj = libbpf.bpf_object__open_mem(bytes.ptr, bytes.len, null);
+    if (obj == null) {
+        print("failed to open bpf object: {}\n", .{std.os.errno(-1)});
+        return error.OPEN;
+    }
+    defer libbpf.bpf_object__close(obj);
+
+    var ret = libbpf.bpf_object__load(obj);
+    if (ret != 0) {
+        print("failed to load bpf object: {}\n", .{std.os.errno(-1)});
+        return error.LOAD;
+    }
+
+    const prog = libbpf.bpf_object__find_program_by_name(obj, "xdp_ping").?;
+    const ipv4 = libbpf.bpf_object__find_map_by_name(obj, "ipv4").?;
+    const ipv6 = libbpf.bpf_object__find_map_by_name(obj, "ipv6").?;
+
+    const idx = c.if_nametoindex("lo");
+    if (idx == 0) {
+        print("failed to get index of lo: {}\n", .{std.os.errno(-1)});
+        return error.DEV;
+    }
+
+    const prog_fd = libbpf.bpf_program__fd(prog);
+    ret = libbpf.bpf_xdp_attach(@intCast(idx), prog_fd, c.XDP_FLAGS_UPDATE_IF_NOEXIST, null);
+    if (ret < 0) {
+        print("failed to attach program: {}\n", .{std.os.errno(-1)});
+        return error.ATTACH;
+    }
+    defer _ = libbpf.bpf_xdp_detach(@intCast(idx), c.XDP_FLAGS_UPDATE_IF_NOEXIST, null);
+
+    const expected: u32 = @as(*const u32, @alignCast(@ptrCast("ipv4"))).*;
+    const expected6: u32 = @as(*const u32, @alignCast(@ptrCast("ipv6"))).*;
+
+    var buf: [16]u8 = undefined;
+    const pattern = try std.fmt.bufPrint(&buf, "{x}", .{expected});
+    var result = try std.ChildProcess.run(.{ .allocator = allocator, .argv = &.{ "ping", "-4", "-c", "1", "-p", pattern, "-s", "4", "localhost" } });
+    //print("{s}\n{s}\n", .{ result.stdout, result.stderr });
+    allocator.free(result.stdout);
+    allocator.free(result.stderr);
+    try testing.expect(result.term.Exited == 0);
+
+    const pattern6 = try std.fmt.bufPrint(&buf, "{x}", .{expected6});
+    result = try std.ChildProcess.run(.{ .allocator = allocator, .argv = &.{ "ping", "-6", "-c", "1", "-p", pattern6, "-s", "4", "localhost" } });
+    //print("{s}\n{s}\n", .{ result.stdout, result.stderr });
+    allocator.free(result.stdout);
+    allocator.free(result.stderr);
+    try testing.expect(result.term.Exited == 0);
+
+    var k: u32 = 0;
+    var v: u32 = undefined;
+    ret = libbpf.bpf_map__lookup_elem(ipv4, &k, @sizeOf(@TypeOf(k)), &v, @sizeOf(@TypeOf(v)), 0);
+    try testing.expectEqual(expected, v);
+
+    ret = libbpf.bpf_map__lookup_elem(ipv6, &k, @sizeOf(@TypeOf(k)), &v, @sizeOf(@TypeOf(v)), 0);
+    try testing.expectEqual(expected6, v);
+}
