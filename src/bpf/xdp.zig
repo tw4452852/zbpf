@@ -14,7 +14,11 @@ pub const Meta = extern struct {
     rx_queue_index: u32,
     egress_ifindex: u32,
 
-    pub fn data(self: *Meta) []u8 {
-        return @as([*c]u8, @ptrFromInt(self.data_begin))[0 .. self.data_end - self.data_begin];
+    pub fn get_ptr(self: *Meta, comptime T: type, offset: u32) ?*T {
+        const ptr: usize = self.data_begin + offset;
+
+        if (ptr + @sizeOf(T) > self.data_end) return null;
+
+        return @ptrFromInt(ptr);
     }
 };

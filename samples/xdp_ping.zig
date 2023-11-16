@@ -44,48 +44,39 @@ const IPv4Hdr = extern struct {
 };
 
 export fn xdp_ping(ctx: *Xdp.Meta) linksection("xdp") c_int {
-    const data = ctx.data();
+    const eth_hdr: *const EthHdr = ctx.get_ptr(EthHdr, 0) orelse return @intFromEnum(Xdp.RET.drop);
 
-    if (data.len > @sizeOf(EthHdr)) {
-        const eth_hdr: *const EthHdr = @alignCast(@ptrCast(data.ptr));
-        const proto_ip4 = 0x0800;
-        const proto_ip6 = 0x86DD;
-        var proto: u16 = undefined;
-        _ = helpers.probe_read_kernel(&proto, @sizeOf(u16), &eth_hdr.proto);
+    const proto_ip4 = 0x0800;
+    const proto_ip6 = 0x86DD;
 
-        switch (proto) {
-            std.mem.nativeTo(u16, proto_ip4, .big) => handle_ipv4(data[@sizeOf(EthHdr)..]),
-            std.mem.nativeTo(u16, proto_ip6, .big) => handle_ipv6(data[@sizeOf(EthHdr)..]),
-            else => {},
-        }
+    switch (eth_hdr.proto) {
+        std.mem.nativeTo(u16, proto_ip4, .big) => handle_ipv4(ctx),
+        std.mem.nativeTo(u16, proto_ip6, .big) => handle_ipv6(ctx),
+        else => {},
     }
     return @intFromEnum(Xdp.RET.pass);
 }
 
-fn handle_ipv4(data: []const u8) void {
-    const hdr: *const IPv4Hdr = @alignCast(@ptrCast(data));
-    var proto: u8 = undefined;
-    _ = helpers.probe_read_kernel(&proto, @sizeOf(u8), &hdr.proto);
-    const IPPROTO_ICMP = 1;
-    if (proto == IPPROTO_ICMP) {
-        const payload: *const u32 = @alignCast(@ptrCast(data[@sizeOf(IPv4Hdr) + @sizeOf(IcmpEchoHdr) ..]));
-        var v: u32 = undefined;
-        _ = helpers.probe_read_kernel(&v, @sizeOf(u32), payload);
+fn handle_ipv4(ctx: *Xdp.Meta) void {
+    const iphdr_offset = @sizeOf(EthHdr);
+    const hdr: *const IPv4Hdr = ctx.get_ptr(IPv4Hdr, iphdr_offset) orelse return;
 
-        ipv4.update(.any, 0, std.mem.toNative(u32, v, .big)) catch {};
+    const IPPROTO_ICMP = 1;
+    if (hdr.proto == IPPROTO_ICMP) {
+        const payload: *const u32 = ctx.get_ptr(u32, iphdr_offset + @sizeOf(IPv4Hdr) + @sizeOf(IcmpEchoHdr)) orelse return;
+
+        ipv4.update(.any, 0, std.mem.toNative(u32, payload.*, .big)) catch {};
     }
 }
 
-fn handle_ipv6(data: []const u8) void {
-    const hdr: *const IPv6Hdr = @alignCast(@ptrCast(data.ptr));
-    var proto: u8 = undefined;
-    _ = helpers.probe_read_kernel(&proto, @sizeOf(u8), &hdr.nxt);
-    const IPPROTO_ICMPV6 = 58;
-    if (proto == IPPROTO_ICMPV6) {
-        const payload: *const u32 = @alignCast(@ptrCast(data[@sizeOf(IPv6Hdr) + @sizeOf(IcmpEchoHdr) ..]));
-        var v: u32 = undefined;
-        _ = helpers.probe_read_kernel(&v, @sizeOf(u32), payload);
+fn handle_ipv6(ctx: *Xdp.Meta) void {
+    const iphdr_offset = @sizeOf(EthHdr);
+    const hdr: *const IPv6Hdr = ctx.get_ptr(IPv6Hdr, iphdr_offset) orelse return;
 
-        ipv6.update(.any, 0, std.mem.toNative(u32, v, .big)) catch {};
+    const IPPROTO_ICMPV6 = 58;
+    if (hdr.nxt == IPPROTO_ICMPV6) {
+        const payload: *const u32 = ctx.get_ptr(u32, iphdr_offset + @sizeOf(IPv6Hdr) + @sizeOf(IcmpEchoHdr)) orelse return;
+
+        ipv6.update(.any, 0, std.mem.toNative(u32, payload.*, .big)) catch {};
     }
 }
