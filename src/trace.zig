@@ -149,32 +149,32 @@ fn on_sample(_ctx: ?*anyopaque, data: ?*anyopaque, _: usize) callconv(.C) c_int 
 
             ctx.stdout.print("pid: {}, {s} {s}: ", .{ pid, if (for_kprobe) "kprobe" else "syscall", func_name }) catch return -1;
             if (comptime hasFn("arg0")(T)) {
-                const v = args.arg0() catch unreachable;
+                const v = args.arg0();
 
                 ctx.stdout.print("arg0: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
             }
             if (comptime hasFn("arg1")(T)) {
-                const v = args.arg1() catch unreachable;
+                const v = args.arg1();
 
                 ctx.stdout.print(", arg1: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
             }
             if (comptime hasFn("arg2")(T)) {
-                const v = args.arg2() catch unreachable;
+                const v = args.arg2();
 
                 ctx.stdout.print(", arg2: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
             }
             if (comptime hasFn("arg3")(T)) {
-                const v = args.arg3() catch unreachable;
+                const v = args.arg3();
 
                 ctx.stdout.print(", arg3: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
             }
             if (comptime hasFn("arg4")(T)) {
-                const v = args.arg4() catch unreachable;
+                const v = args.arg4();
 
                 ctx.stdout.print("arg4: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
             }
             if (comptime hasFn("ret")(T)) {
-                const v = args.ret() catch unreachable;
+                const v = args.ret();
 
                 ctx.stdout.print(", ret: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
             }

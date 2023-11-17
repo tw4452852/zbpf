@@ -11,7 +11,7 @@ export fn test_hash() linksection("xdp") c_int {
         if (v.* != 1) return 2;
     } else return 3;
 
-    hash.delete(0) catch return 4;
-    hash.update(.noexist, 1, 2) catch return 5;
+    hash.delete(0);
+    hash.update(.noexist, 1, 2);
     return 0;
 }

@@ -18,7 +18,7 @@ fn generate_kprobe(comptime name: []const u8, comptime id: u32) type {
 
         fn kprobe_entry(regs: *REGS) linksection(tracked_func.entry_section()) callconv(.C) c_long {
             const tpid = helpers.get_current_pid_tgid();
-            buffer.update(.any, tpid, regs.*) catch return 1;
+            buffer.update(.any, tpid, regs.*);
 
             return 0;
         }
@@ -30,7 +30,7 @@ fn generate_kprobe(comptime name: []const u8, comptime id: u32) type {
         fn kprobe_exit(regs: *REGS) linksection(tracked_func.exit_section()) callconv(.C) c_long {
             const tpid = helpers.get_current_pid_tgid();
             if (buffer.lookup(tpid)) |v| {
-                const resv = events.reserve(TRACE_RECORD) catch return 2;
+                const resv = events.reserve(TRACE_RECORD);
                 v.ret_ptr().* = regs.ret_ptr().*;
                 resv.data_ptr.* = .{
                     .id = id,
@@ -60,7 +60,7 @@ fn generate_syscall(comptime name: []const u8, comptime id: u32) type {
         fn syscall_entry(args: *tracked_syscall.Ctx()) linksection(tracked_syscall.entry_section()) callconv(.C) c_long {
             const tpid = helpers.get_current_pid_tgid();
 
-            buffer.update(.any, tpid, std.mem.zeroes(REGS)) catch return 1;
+            buffer.update(.any, tpid, std.mem.zeroes(REGS));
             if (buffer.lookup(tpid)) |v| {
                 const err = helpers.probe_read_kernel(v, @sizeOf(REGS), args.get_arg_ctx().get_regs());
                 if (err != 0) return 1;
@@ -76,8 +76,8 @@ fn generate_syscall(comptime name: []const u8, comptime id: u32) type {
         fn syscall_exit(args: *tracked_syscall.Ctx()) linksection(tracked_syscall.exit_section()) callconv(.C) c_long {
             const tpid = helpers.get_current_pid_tgid();
             if (buffer.lookup(tpid)) |v| {
-                const ret = args.ret() catch return 1;
-                const resv = events.reserve(TRACE_RECORD) catch return 2;
+                const ret = args.ret();
+                const resv = events.reserve(TRACE_RECORD);
                 v.ret_ptr().* = @bitCast(ret);
                 resv.data_ptr.* = .{
                     .id = id,

@@ -12,6 +12,6 @@ const tp = bpf.Tracepoint{
 
 export fn test_tracepoint(ctx: *tp.Ctx()) linksection(tp.section()) callconv(.C) c_int {
     n += ctx.prev_pid;
-    count.update(.any, 0, n) catch return 1;
+    count.update(.any, 0, n);
     return 0;
 }

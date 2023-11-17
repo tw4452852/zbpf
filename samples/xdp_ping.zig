@@ -65,7 +65,7 @@ fn handle_ipv4(ctx: *Xdp.Meta) void {
     if (hdr.proto == IPPROTO_ICMP) {
         const payload: *const u32 = ctx.get_ptr(u32, iphdr_offset + @sizeOf(IPv4Hdr) + @sizeOf(IcmpEchoHdr)) orelse return;
 
-        ipv4.update(.any, 0, std.mem.toNative(u32, payload.*, .big)) catch {};
+        ipv4.update(.any, 0, std.mem.toNative(u32, payload.*, .big));
     }
 }
 
@@ -77,6 +77,6 @@ fn handle_ipv6(ctx: *Xdp.Meta) void {
     if (hdr.nxt == IPPROTO_ICMPV6) {
         const payload: *const u32 = ctx.get_ptr(u32, iphdr_offset + @sizeOf(IPv6Hdr) + @sizeOf(IcmpEchoHdr)) orelse return;
 
-        ipv6.update(.any, 0, std.mem.toNative(u32, payload.*, .big)) catch {};
+        ipv6.update(.any, 0, std.mem.toNative(u32, payload.*, .big));
     }
 }

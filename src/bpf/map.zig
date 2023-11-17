@@ -5,6 +5,7 @@ const kernelMapDef = std.os.linux.BPF.kern.MapDef;
 const StructField = std.builtin.Type.StructField;
 const Declaration = std.builtin.Type.Declaration;
 const vmlinux = @import("vmlinux");
+const exit = @import("root.zig").exit;
 
 pub const MapUpdateType = enum(u64) {
     any = std.os.linux.BPF.ANY,
@@ -88,7 +89,7 @@ fn Map(
         /// Flag value `noexist` cannot be used for maps of types
         /// `BPF_MAP_TYPE_ARRAY` or `BPF_MAP_TYPE_PERCPU_ARRAY` (all elements
         /// always exist), the helper would return an error.
-        pub fn update(_: *const Self, update_type: MapUpdateType, key: Key, value: Value) !void {
+        pub fn update(_: *const Self, update_type: MapUpdateType, key: Key, value: Value) void {
             const rc = helpers.map_update_elem(
                 @ptrCast(&Self.def),
                 &key,
@@ -97,16 +98,16 @@ fn Map(
             );
             return switch (rc) {
                 0 => {},
-                else => error.Unknown,
+                else => exit(error.Unknown),
             };
         }
 
         /// Delete entry with *key* from *map*.
-        pub fn delete(_: *const Self, key: Key) !void {
+        pub fn delete(_: *const Self, key: Key) void {
             const rc = helpers.map_delete_elem(@ptrCast(&Self.def), &key);
             return switch (rc) {
                 0 => {},
-                else => error.Unknown,
+                else => exit(error.Unknown),
             };
         }
     };
@@ -132,11 +133,11 @@ pub fn HashMap(
             return self.map.lookup(key);
         }
 
-        pub fn update(self: *const Self, update_type: MapUpdateType, key: Key, value: Value) !void {
+        pub fn update(self: *const Self, update_type: MapUpdateType, key: Key, value: Value) void {
             return self.map.update(update_type, key, value);
         }
 
-        pub fn delete(self: *const Self, key: Key) !void {
+        pub fn delete(self: *const Self, key: Key) void {
             return self.map.delete(key);
         }
     };
@@ -161,7 +162,7 @@ pub fn ArrayMap(
             return self.map.lookup(key);
         }
 
-        pub fn update(self: *const Self, update_type: MapUpdateType, key: u32, value: Value) !void {
+        pub fn update(self: *const Self, update_type: MapUpdateType, key: u32, value: Value) void {
             return self.map.update(update_type, key, value);
         }
     };
@@ -181,11 +182,11 @@ pub fn PerfEventArray(
             return .{ .map = .{} };
         }
 
-        pub fn event_output(self: *const Self, ctx: anytype, index: ?u64, data: []const u8) !void {
+        pub fn event_output(self: *const Self, ctx: anytype, index: ?u64, data: []const u8) void {
             const rc = helpers.perf_event_output(ctx, @ptrCast(&@TypeOf(self.map).def), if (index) |i| i else vmlinux.BPF_F_CURRENT_CPU, @constCast(data.ptr), data.len);
             return switch (rc) {
                 0 => {},
-                else => error.Unknown,
+                else => exit(error.Unknown),
             };
         }
     };
@@ -211,7 +212,7 @@ pub fn RingBuffer(
             return .{ .map = .{} };
         }
 
-        pub fn event_output(self: *const Self, data: []const u8, notify: RingBufNotify) !void {
+        pub fn event_output(self: *const Self, data: []const u8, notify: RingBufNotify) void {
             const rc = helpers.ringbuf_output(&@TypeOf(self.map).def, @constCast(data.ptr), data.len, switch (notify) {
                 .auto => 0,
                 .force_notify => vmlinux.BPF_RB_FORCE_WAKEUP,
@@ -219,11 +220,11 @@ pub fn RingBuffer(
             });
             return switch (rc) {
                 0 => {},
-                else => error.Unknown,
+                else => exit(error.Unknown),
             };
         }
 
-        pub fn reserve(self: *const Self, comptime T: type) !struct {
+        pub fn reserve(self: *const Self, comptime T: type) struct {
             data_ptr: *T,
 
             pub fn commit(s: *const @This()) void {
@@ -232,7 +233,7 @@ pub fn RingBuffer(
         } {
             if (helpers.ringbuf_reserve(&@TypeOf(self.map).def, @sizeOf(T), 0)) |ptr| return .{
                 .data_ptr = @alignCast(@ptrCast(ptr)),
-            } else return error.Unknown;
+            } else exit(error.Unknown);
         }
     };
 }

@@ -15,9 +15,9 @@ export fn test_ringbuf() linksection("kprobe/do_nanosleep") c_int {
     if (cur_pid == pid.*) {
         var a: u8 = '1';
         if (n % 2 == 1) {
-            events.event_output(std.mem.asBytes(&a), @enumFromInt(n % 3)) catch return 1;
+            events.event_output(std.mem.asBytes(&a), @enumFromInt(n % 3));
         } else {
-            const resv = events.reserve(@TypeOf(a)) catch return 2;
+            const resv = events.reserve(@TypeOf(a));
             resv.data_ptr.* = a;
             resv.commit();
         }

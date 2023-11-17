@@ -11,6 +11,6 @@ export fn test_array() linksection("xdp") c_int {
         if (v.* != 1) return 2;
     } else return 3;
 
-    array.update(.exist, 1, 2) catch return 4;
+    array.update(.exist, 1, 2);
     return 0;
 }

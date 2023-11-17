@@ -2,6 +2,7 @@ const vmlinux = @import("vmlinux");
 const std = @import("std");
 const StructField = std.builtin.Type.StructField;
 const helpers = std.os.linux.BPF.kern.helpers;
+const exit = @import("root.zig").exit;
 
 extern var LINUX_HAS_SYSCALL_WRAPPER: bool linksection(".kconfig");
 
@@ -160,13 +161,13 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
         pub usingnamespace if (f.Fn.params.len < 1) struct {} else struct {
             const RET = f.Fn.params[0].type.?;
 
-            pub fn arg0(self: *Self) !RET {
+            pub fn arg0(self: *Self) RET {
                 if (!in_bpf_program) {
                     return cast(RET, self.get_regs().arg0_ptr().*);
                 } else {
                     var ret: RET = undefined;
                     const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg0_ptr());
-                    return if (err != 0) error.READ_KERN else ret;
+                    return if (err != 0) exit(error.READ_KERN) else ret;
                 }
             }
         };
@@ -174,13 +175,13 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
         pub usingnamespace if (f.Fn.params.len < 2) struct {} else struct {
             const RET = f.Fn.params[1].type.?;
 
-            pub fn arg1(self: *Self) !RET {
+            pub fn arg1(self: *Self) RET {
                 if (!in_bpf_program) {
                     return cast(RET, self.get_regs().arg1_ptr().*);
                 } else {
                     var ret: RET = undefined;
                     const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg1_ptr());
-                    return if (err != 0) error.READ_KERN else ret;
+                    return if (err != 0) exit(error.READ_KERN) else ret;
                 }
             }
         };
@@ -188,13 +189,13 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
         pub usingnamespace if (f.Fn.params.len < 3) struct {} else struct {
             const RET = f.Fn.params[2].type.?;
 
-            pub fn arg2(self: *Self) !RET {
+            pub fn arg2(self: *Self) RET {
                 if (!in_bpf_program) {
                     return cast(RET, self.get_regs().arg2_ptr().*);
                 } else {
                     var ret: RET = undefined;
                     const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg2_ptr());
-                    return if (err != 0) error.READ_KERN else ret;
+                    return if (err != 0) exit(error.READ_KERN) else ret;
                 }
             }
         };
@@ -202,13 +203,13 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
         pub usingnamespace if (f.Fn.params.len < 4) struct {} else struct {
             const RET = f.Fn.params[3].type.?;
 
-            pub fn arg3(self: *Self) !RET {
+            pub fn arg3(self: *Self) RET {
                 if (!in_bpf_program) {
                     return cast(RET, self.get_regs().arg3_ptr(for_syscall).*);
                 } else {
                     var ret: RET = undefined;
                     const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg3_ptr(for_syscall));
-                    return if (err != 0) error.READ_KERN else ret;
+                    return if (err != 0) exit(error.READ_KERN) else ret;
                 }
             }
         };
@@ -216,13 +217,13 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
         pub usingnamespace if (f.Fn.params.len < 5) struct {} else struct {
             const RET = f.Fn.params[4].type.?;
 
-            pub fn arg4(self: *Self) !RET {
+            pub fn arg4(self: *Self) RET {
                 if (!in_bpf_program) {
                     return cast(RET, self.get_regs().arg4_ptr().*);
                 } else {
                     var ret: RET = undefined;
                     const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg4_ptr());
-                    return if (err != 0) error.READ_KERN else ret;
+                    return if (err != 0) exit(error.READ_KERN) else ret;
                 }
             }
         };
@@ -230,13 +231,13 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
         pub usingnamespace if (f.Fn.return_type.? == void) struct {} else struct {
             const RET = f.Fn.return_type.?;
 
-            pub fn ret(self: *Self) !RET {
+            pub fn ret(self: *Self) RET {
                 if (!in_bpf_program) {
                     return cast(RET, self.get_regs().ret_ptr().*);
                 } else {
                     var v: RET = undefined;
                     const err = helpers.probe_read_kernel(@ptrCast(&v), @sizeOf(RET), self.get_regs().ret_ptr());
-                    return if (err != 0) error.READ_KERN else v;
+                    return if (err != 0) exit(error.READ_KERN) else v;
                 }
             }
         };
@@ -265,7 +266,7 @@ pub fn SYSCALL(comptime name: []const u8) type {
         pub usingnamespace if (f.Fn.params.len < 1) struct {} else struct {
             const RET = f.Fn.params[0].type.?;
 
-            pub fn arg0(self: *Self) !RET {
+            pub fn arg0(self: *Self) RET {
                 return self.get_arg_ctx().arg0();
             }
         };
@@ -273,7 +274,7 @@ pub fn SYSCALL(comptime name: []const u8) type {
         pub usingnamespace if (f.Fn.params.len < 2) struct {} else struct {
             const RET = f.Fn.params[1].type.?;
 
-            pub fn arg1(self: *Self) !RET {
+            pub fn arg1(self: *Self) RET {
                 return self.get_arg_ctx().arg1();
             }
         };
@@ -281,7 +282,7 @@ pub fn SYSCALL(comptime name: []const u8) type {
         pub usingnamespace if (f.Fn.params.len < 3) struct {} else struct {
             const RET = f.Fn.params[2].type.?;
 
-            pub fn arg2(self: *Self) !RET {
+            pub fn arg2(self: *Self) RET {
                 return self.get_arg_ctx().arg2();
             }
         };
@@ -289,7 +290,7 @@ pub fn SYSCALL(comptime name: []const u8) type {
         pub usingnamespace if (f.Fn.params.len < 4) struct {} else struct {
             const RET = f.Fn.params[3].type.?;
 
-            pub fn arg3(self: *Self) !RET {
+            pub fn arg3(self: *Self) RET {
                 return self.get_arg_ctx().arg3();
             }
         };
@@ -297,7 +298,7 @@ pub fn SYSCALL(comptime name: []const u8) type {
         pub usingnamespace if (f.Fn.params.len < 5) struct {} else struct {
             const RET = f.Fn.params[4].type.?;
 
-            pub fn arg4(self: *Self) !RET {
+            pub fn arg4(self: *Self) RET {
                 return self.get_arg_ctx().arg4();
             }
         };
@@ -305,7 +306,7 @@ pub fn SYSCALL(comptime name: []const u8) type {
         pub usingnamespace if (f.Fn.return_type.? == void) struct {} else struct {
             const RET = f.Fn.return_type.?;
 
-            pub fn ret(self: *Self) !RET {
+            pub fn ret(self: *Self) RET {
                 return @as(*T, @ptrCast(self)).ret();
             }
         };
