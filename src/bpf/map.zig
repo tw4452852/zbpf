@@ -98,7 +98,7 @@ fn Map(
             );
             return switch (rc) {
                 0 => {},
-                else => exit(error.Unknown),
+                else => exit(@src(), rc),
             };
         }
 
@@ -107,7 +107,7 @@ fn Map(
             const rc = helpers.map_delete_elem(@ptrCast(&Self.def), &key);
             return switch (rc) {
                 0 => {},
-                else => exit(error.Unknown),
+                else => exit(@src(), rc),
             };
         }
     };
@@ -186,7 +186,7 @@ pub fn PerfEventArray(
             const rc = helpers.perf_event_output(ctx, @ptrCast(&@TypeOf(self.map).def), if (index) |i| i else vmlinux.BPF_F_CURRENT_CPU, @constCast(data.ptr), data.len);
             return switch (rc) {
                 0 => {},
-                else => exit(error.Unknown),
+                else => exit(@src(), rc),
             };
         }
     };
@@ -220,7 +220,7 @@ pub fn RingBuffer(
             });
             return switch (rc) {
                 0 => {},
-                else => exit(error.Unknown),
+                else => exit(@src(), rc),
             };
         }
 
@@ -233,7 +233,7 @@ pub fn RingBuffer(
         } {
             if (helpers.ringbuf_reserve(&@TypeOf(self.map).def, @sizeOf(T), 0)) |ptr| return .{
                 .data_ptr = @alignCast(@ptrCast(ptr)),
-            } else exit(error.Unknown);
+            } else exit(@src(), @as(c_long, -1));
         }
     };
 }

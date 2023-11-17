@@ -7,8 +7,18 @@ pub const Ksyscall = @import("ksyscall.zig");
 pub const Args = @import("args.zig");
 pub const Xdp = @import("xdp.zig");
 
-pub inline fn exit(_: anyerror) noreturn {
+const std = @import("std");
+const trace_printk = std.os.linux.BPF.kern.helpers.trace_printk;
+const SourceLocation = std.builtin.SourceLocation;
+
+pub inline fn exit(comptime src: SourceLocation, ret: anytype) noreturn {
     @setCold(true);
+
+    const fmt = "error occur at %s:%d return %d";
+    const file = @as(*const [src.file.len:0]u8, @ptrCast(src.file)).*;
+    const line = src.line;
+
+    _ = trace_printk(fmt, fmt.len + 1, @intFromPtr(&file), line, @bitCast(ret));
 
     asm volatile ("exit"
         :

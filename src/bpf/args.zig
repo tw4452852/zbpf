@@ -167,7 +167,7 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
                 } else {
                     var ret: RET = undefined;
                     const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg0_ptr());
-                    return if (err != 0) exit(error.READ_KERN) else ret;
+                    return if (err != 0) exit(@src(), err) else ret;
                 }
             }
         };
@@ -181,7 +181,7 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
                 } else {
                     var ret: RET = undefined;
                     const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg1_ptr());
-                    return if (err != 0) exit(error.READ_KERN) else ret;
+                    return if (err != 0) exit(@src(), err) else ret;
                 }
             }
         };
@@ -195,7 +195,7 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
                 } else {
                     var ret: RET = undefined;
                     const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg2_ptr());
-                    return if (err != 0) exit(error.READ_KERN) else ret;
+                    return if (err != 0) exit(@src(), err) else ret;
                 }
             }
         };
@@ -209,7 +209,7 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
                 } else {
                     var ret: RET = undefined;
                     const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg3_ptr(for_syscall));
-                    return if (err != 0) exit(error.READ_KERN) else ret;
+                    return if (err != 0) exit(@src(), err) else ret;
                 }
             }
         };
@@ -223,7 +223,7 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
                 } else {
                     var ret: RET = undefined;
                     const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg4_ptr());
-                    return if (err != 0) exit(error.READ_KERN) else ret;
+                    return if (err != 0) exit(@src(), err) else ret;
                 }
             }
         };
@@ -237,7 +237,7 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
                 } else {
                     var v: RET = undefined;
                     const err = helpers.probe_read_kernel(@ptrCast(&v), @sizeOf(RET), self.get_regs().ret_ptr());
-                    return if (err != 0) exit(error.READ_KERN) else v;
+                    return if (err != 0) exit(@src(), err) else v;
                 }
             }
         };
