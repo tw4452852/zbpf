@@ -22,7 +22,6 @@ fn create_bpf_prog(ctx: *const Ctx, src_path: []const u8) *std.build.CompileStep
     });
     prog.addModule("bpf", ctx.bpf);
     prog.addModule("build_options", ctx.bpf);
-    prog.linkLibC();
     prog.addOptions("build_options", ctx.build_options);
 
     return prog;
