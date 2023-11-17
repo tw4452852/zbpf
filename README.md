@@ -1,12 +1,57 @@
 # zbpf
 Writing eBPF in Zig. Thanks to Zig's comptime and BTF, we can equip eBPF with strong type system both at comptime and runtime!
 
+## Notable advantages when writing eBPF program with `zbpf`
+
+### Different available methods based on the type of program's context
+
+Suppose you want to trace the kernel function [path_listxattr](https://github.com/torvalds/linux/blob/7475e51b87969e01a6812eac713a1c8310372e8a/fs/xattr.c#L856-L857),
+and here's its prototype:
+
+```
+static ssize_t path_listxattr(const char __user *pathname, char __user *list,
+			      size_t size, unsigned int lookup_flags)
+```
+As you can see, it has 4 input parameters and return type is `ssize_t`.
+With `ctx = bpf.Kprobe{.name = "path_listxattr"}.Ctx()`, you could retrieve
+the input parameter with `ctx.arg0()`, `ctx.arg1()`, `ctx.arg2()` and `ctx.arg3()` respectively,
+and return value with `ctx.ret()`.
+the type will be consistent with the above prototype. If you try to access a non-existing
+parameter, e.g. `ctx.arg4()`, you will get a compilation error. 
+
+This also applies to `syscall` with `bpf.Ksyscall`, `tracepoint` with `bpf.Tracepoint` and
+`fentry` with `bpf.Fentry`.
+
+### No more tedious error handling
+
+When writing in C, you always have to check the error conditions
+(the return value of the helper function, pointer validation, ...)
+With `zbpf`, you won't care about the these cases, we handle it under the hood for you,
+just focus on the business logic.
+
+The following are some examples:
+
+- `bpf.Map` takes care BPF map's `update` and `delete` error.
+- `bpf.PerfEventArray` handles event output failure.
+- `bpf.RingBuffer` also handles space reservation.
+- `bpf.Xdp` validates the pointer for you.
+
+If some error happens, you could get all the information (file, line number, return value ...)
+you need to debug in the kernel trace buffer:
+
+```
+~> sudo bpftool prog tracelog
+test-11717   [005] d..21 10990692.273976: bpf_trace_printk: error occur at src/bpf/map.zig:110 return -2
+```
+
+## How to use
+
 ## Prerequisite
 
 - Make sure the linux kernel is built with `CONFIG_DEBUG_INFO_BTF=y`.
 - The only runtime library is `libc` (this is not even necessary if you build with musl-libc).
 
-## How to use
+## Build
 
 - Download the [lastest Zig](https://ziglang.org/download/).
 - Clone this repostory.
