@@ -14,8 +14,6 @@ const SourceLocation = builtin.SourceLocation;
 const StackTrace = builtin.StackTrace;
 
 pub inline fn exit(comptime src: SourceLocation, ret: anytype) noreturn {
-    @setCold(true);
-
     const fmt = "error occur at %s:%d return %d";
     const file = @as(*const [src.file.len:0]u8, @ptrCast(src.file)).*;
     const line = src.line;
@@ -31,7 +29,6 @@ pub inline fn exit(comptime src: SourceLocation, ret: anytype) noreturn {
 }
 
 pub fn panic(msg: []const u8, error_return_trace: ?*StackTrace, ret_addr: ?usize) noreturn {
-    @setCold(true);
     _ = error_return_trace;
     _ = ret_addr;
 
