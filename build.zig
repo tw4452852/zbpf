@@ -339,6 +339,8 @@ pub fn build(b: *Builder) !void {
     try create_target_step(&ctx, "src/trace.zig", "src/trace.bpf.zig", "trace");
 
     try create_test_step(&ctx);
+
+    try create_docs_step(&ctx);
 }
 
 fn create_target_step(ctx: *const Ctx, main_path: []const u8, prog_path: []const u8, exe_name: ?[]const u8) !void {
@@ -404,4 +406,26 @@ fn create_test_step(ctx: *const Ctx) !void {
 
     const run_test_step = ctx.b.step("test", "Build unit tests");
     run_test_step.dependOn(&install_test.step);
+}
+
+fn create_docs_step(ctx: *const Ctx) !void {
+    const exe = ctx.b.addObject(.{
+        .name = "docs",
+        .root_source_file = .{ .path = "src/docs/docs.zig" },
+        .target = ctx.target,
+        .optimize = ctx.optimize,
+    });
+
+    const dumb_vmlinux = ctx.b.addModule("dumb_vmlinux", .{ .source_file = .{ .path = "src/docs/vmlinux.zig" } });
+    const bpf = create_bpf(ctx.b, dumb_vmlinux);
+    exe.addModule("bpf", bpf);
+
+    const install_docs = ctx.b.addInstallDirectory(.{
+        .source_dir = exe.getEmittedDocs(),
+        .install_dir = .prefix,
+        .install_subdir = "docs",
+    });
+
+    const step = ctx.b.step("docs", "generate documents");
+    step.dependOn(&install_docs.step);
 }
