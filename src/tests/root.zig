@@ -40,6 +40,8 @@ pub fn close_tracebuf_pipe(f: std.fs.File) void {
 }
 
 test {
+    _ = @import("exit.zig");
+    _ = @import("panic.zig");
     _ = @import("trace_printk.zig");
     _ = @import("array.zig");
     _ = @import("hash.zig");

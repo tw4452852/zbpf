@@ -17,7 +17,7 @@ With `ctx = bpf.Kprobe{.name = "path_listxattr"}.Ctx()`, you could retrieve
 the input parameter with `ctx.arg0()`, `ctx.arg1()`, `ctx.arg2()` and `ctx.arg3()` respectively,
 and return value with `ctx.ret()`.
 the type will be consistent with the above prototype. If you try to access a non-existing
-parameter, e.g. `ctx.arg4()`, you will get a compilation error. 
+parameter, e.g. `ctx.arg4()`, you will get a compilation error.
 
 This also applies to `syscall` with `bpf.Ksyscall`, `tracepoint` with `bpf.Tracepoint` and
 `fentry` with `bpf.Fentry`.
@@ -92,6 +92,8 @@ Build it with `zig build test -Dtest=<name>` and run it with `sudo zig-out/bin/t
 
 Name | BPF side | Host side
 --- | --- | ---
+exit | [source](samples/exit.zig) | [source](src/tests/exit.zig)
+panic | [source](samples/panic.zig) | [source](src/tests/panic.zig)
 trace_printk | [source](samples/trace_printk.zig) | [source](src/tests/trace_printk.zig)
 array | [source](samples/array.zig) | [source](src/tests/array.zig)
 hash | [source](samples/hash.zig) | [source](src/tests/hash.zig)
