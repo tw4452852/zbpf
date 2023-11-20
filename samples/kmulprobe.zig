@@ -3,6 +3,7 @@ const bpf = @import("bpf");
 const REGS = bpf.Args.REGS;
 const helpers = std.os.linux.BPF.kern.helpers;
 const trace_printk = helpers.trace_printk;
+const exit = bpf.exit;
 
 // pair pid_tid with REGS
 var buffer = bpf.Map.HashMap("buffer", u64, REGS, 0xffff, 0).init();
@@ -25,7 +26,7 @@ export fn test_kmulretprobe(regs: *REGS) linksection("kretprobe.multi") callconv
     } else {
         const fmt = "exit failed\n";
         _ = trace_printk(fmt, fmt.len + 1, 0, 0, 0);
-        return 1;
+        exit(@src(), @as(c_long, 1));
     }
 
     return 0;
