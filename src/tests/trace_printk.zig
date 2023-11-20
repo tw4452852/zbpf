@@ -40,5 +40,12 @@ test "trace_printk" {
             return error.RUN;
         }
         try testing.expectEqual(std.fmt.count("{}", .{arg}), attr.retval);
+
+        const f = try root.open_tracebuf_pipe();
+        defer root.close_tracebuf_pipe(f);
+        const r = f.reader();
+        const l = try r.readUntilDelimiterAlloc(allocator, '\n', std.math.maxInt(u32));
+        defer allocator.free(l);
+        try testing.expectStringEndsWith(l, "bpf_trace_printk: 123");
     }
 }

@@ -21,6 +21,24 @@ pub fn btf_name_exist(name: []const u8) bool {
     return false;
 }
 
+const tracefs_mount_dir = "./tracefs";
+
+pub fn open_tracebuf_pipe() !std.fs.File {
+    const cwd = std.fs.cwd();
+    try cwd.makeDir(tracefs_mount_dir);
+    const ret = std.os.linux.getErrno(std.os.linux.mount("zbpf_test", tracefs_mount_dir, "tracefs", 0, 0));
+    if (ret != .SUCCESS) return error.MOUNT;
+
+    return try cwd.openFile(tracefs_mount_dir ++ "/trace_pipe", .{});
+}
+
+pub fn close_tracebuf_pipe(f: std.fs.File) void {
+    f.close();
+    const ret = std.os.linux.getErrno(std.os.linux.umount(tracefs_mount_dir));
+    if (ret != .SUCCESS) @panic(@tagName(ret));
+    std.fs.cwd().deleteDir(tracefs_mount_dir) catch unreachable;
+}
+
 test {
     _ = @import("trace_printk.zig");
     _ = @import("array.zig");
