@@ -9,7 +9,9 @@ pub const Xdp = @import("xdp.zig");
 
 const std = @import("std");
 const trace_printk = std.os.linux.BPF.kern.helpers.trace_printk;
-const SourceLocation = std.builtin.SourceLocation;
+const builtin = std.builtin;
+const SourceLocation = builtin.SourceLocation;
+const StackTrace = builtin.StackTrace;
 
 pub inline fn exit(comptime src: SourceLocation, ret: anytype) noreturn {
     @setCold(true);
@@ -24,6 +26,26 @@ pub inline fn exit(comptime src: SourceLocation, ret: anytype) noreturn {
         :
         : [err] "{r0}" (0), // TODO: exit err?
     );
+
+    unreachable;
+}
+
+pub fn panic(msg: []const u8, error_return_trace: ?*StackTrace, ret_addr: ?usize) noreturn {
+    @setCold(true);
+    _ = error_return_trace;
+    _ = ret_addr;
+
+    var buffer = std.BoundedArray(u8, 128).fromSlice(msg) catch exit(@src(), @as(c_long, -1));
+    buffer.append(0) catch exit(@src(), @as(c_long, -1));
+
+    const fmt = "Panic: %s";
+    _ = trace_printk(fmt, fmt.len + 1, @intFromPtr(buffer.constSlice().ptr), 0, 0);
+
+    asm volatile ("exit"
+        :
+        : [err] "{r0}" (0), // TODO: exit err?
+    );
+
     unreachable;
 }
 
