@@ -53,19 +53,20 @@ pub fn main() !void {
             const func_name = try std.fmt.bufPrintZ(&buf, "_zig_{s}", .{libbpf.btf__name_by_offset(btf, t[0].name_off)});
             if (funcs.get(func_name) != null) continue;
 
+            // NOTE: redefine due to the original one has bitfields
             const OPT = extern struct {
                 sz: usize,
                 field_name: [*c]const u8,
                 indent_level: c_int = 0,
                 strip_mods: bool = false,
             };
-            var opt: OPT = .{
+            var opt = std.mem.zeroInit(OPT, .{
                 .sz = @sizeOf(OPT),
                 .field_name = func_name,
-            };
+            });
             const err = libbpf.btf_dump__emit_type_decl(d, t[0].unnamed_0.type, @ptrCast(&opt));
             if (err != 0) {
-                print("failed to dump {}th btf type: {}\n", .{ i, std.os.errno(-1) });
+                print("failed to dump {}th btf type: {} for function {s}\n", .{ i, std.os.errno(-1), func_name });
                 return error.DUMP;
             }
             try std.fmt.format(stdout, ";\n", .{});
