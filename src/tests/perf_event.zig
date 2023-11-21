@@ -77,7 +77,7 @@ const Ctx = extern struct {
 
 fn on_sample(_ctx: ?*anyopaque, _: c_int, data: ?*anyopaque, _: u32) callconv(.C) void {
     var ctx: *Ctx = @ptrCast(@alignCast(_ctx.?));
-    var s = std.mem.sliceTo(@as([*c]const u8, @ptrCast(data)), 0);
+    const s = std.mem.sliceTo(@as([*c]const u8, @ptrCast(data)), 0);
 
     ctx.seen += 1;
     ctx.got.appendSlice(s) catch unreachable;

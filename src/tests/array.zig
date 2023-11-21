@@ -26,7 +26,7 @@ test "array" {
     }
 
     if (libbpf.bpf_object__next_program(obj, null)) |prog| {
-        var map = libbpf.bpf_object__next_map(obj, null).?;
+        const map = libbpf.bpf_object__next_map(obj, null).?;
 
         // map[0] = 1
         var k: u32 = 0;

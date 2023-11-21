@@ -77,7 +77,7 @@ const Ctx = extern struct {
 
 fn on_sample(_ctx: ?*anyopaque, _data: ?*anyopaque, _: usize) callconv(.C) c_int {
     var ctx: *Ctx = @ptrCast(@alignCast(_ctx.?));
-    var c: *const u8 = @ptrCast(_data.?);
+    const c: *const u8 = @ptrCast(_data.?);
 
     ctx.seen += 1;
     ctx.got.append(c.*) catch unreachable;

@@ -22,7 +22,7 @@ test "kmulprobe" {
     }
     defer libbpf.bpf_object__close(obj);
 
-    var ret = libbpf.bpf_object__load(obj);
+    const ret = libbpf.bpf_object__load(obj);
     if (ret != 0) {
         print("failed to load bpf object: {}\n", .{std.os.errno(-1)});
         return error.LOAD;
