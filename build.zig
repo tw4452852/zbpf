@@ -416,7 +416,7 @@ fn create_docs_step(ctx: *const Ctx) !void {
         .optimize = ctx.optimize,
     });
 
-    const dumb_vmlinux = ctx.b.addModule("dumb_vmlinux", .{ .source_file = .{ .path = "src/docs/vmlinux.zig" } });
+    const dumb_vmlinux = ctx.b.addModule("dumb_vmlinux", .{ .source_file = .{ .path = "src/docs/dummy_vmlinux.zig" } });
     const bpf = create_bpf(ctx.b, dumb_vmlinux);
     exe.addModule("bpf", bpf);
 

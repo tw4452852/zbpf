@@ -1,3 +1,1 @@
-const bpf = @import("bpf");
-
-pub const Xdp = bpf.Xdp;
+pub usingnamespace @import("bpf");
