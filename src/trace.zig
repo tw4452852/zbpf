@@ -6,7 +6,6 @@ const libbpf = @cImport({
 const bpf = @import("bpf");
 const vmlinux = @import("vmlinux");
 const TRACE_RECORD = bpf.Args.TRACE_RECORD;
-const hasFn = std.meta.trait.hasFn;
 const is_pointer = bpf.Args.is_pointer;
 const cast = bpf.Args.cast;
 const process = std.process;
@@ -148,32 +147,32 @@ fn on_sample(_ctx: ?*anyopaque, data: ?*anyopaque, _: usize) callconv(.C) c_int 
             const pid: u32 = @truncate(record.tpid);
 
             ctx.stdout.print("pid: {}, {s} {s}: ", .{ pid, if (for_kprobe) "kprobe" else "syscall", func_name }) catch return -1;
-            if (comptime hasFn("arg0")(T)) {
+            if (comptime @hasDecl(T, "arg0")) {
                 const v = args.arg0();
 
                 ctx.stdout.print("arg0: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
             }
-            if (comptime hasFn("arg1")(T)) {
+            if (comptime @hasDecl(T, "arg1")) {
                 const v = args.arg1();
 
                 ctx.stdout.print(", arg1: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
             }
-            if (comptime hasFn("arg2")(T)) {
+            if (comptime @hasDecl(T, "arg2")) {
                 const v = args.arg2();
 
                 ctx.stdout.print(", arg2: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
             }
-            if (comptime hasFn("arg3")(T)) {
+            if (comptime @hasDecl(T, "arg3")) {
                 const v = args.arg3();
 
                 ctx.stdout.print(", arg3: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
             }
-            if (comptime hasFn("arg4")(T)) {
+            if (comptime @hasDecl(T, "arg4")) {
                 const v = args.arg4();
 
                 ctx.stdout.print("arg4: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
             }
-            if (comptime hasFn("ret")(T)) {
+            if (comptime @hasDecl(T, "ret")) {
                 const v = args.ret();
 
                 ctx.stdout.print(", ret: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
