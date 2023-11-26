@@ -391,7 +391,7 @@ fn create_test_step(ctx: *const Ctx) !void {
     const install_test = ctx.b.addInstallArtifact(exe_tests, .{});
 
     // Create bpf programs for test
-    var sample_dir = try fs.cwd().openIterableDir("samples", .{});
+    var sample_dir = try fs.cwd().openDir("samples", .{ .iterate = true });
     defer sample_dir.close();
     var it = sample_dir.iterate();
     while (try it.next()) |entry| {
