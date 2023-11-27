@@ -1,10 +1,18 @@
+/// Represent [tracepoints](https://docs.kernel.org/trace/tracepoints.html) in kernel.
 pub const Tracepoint = @import("tracepoint.zig");
+/// Represent all kinds of maps in BPF.
 pub const Map = @import("map.zig");
+/// Represent [BPF Iterator](https://docs.kernel.org/bpf/bpf_iterators.html) in bpf program.
 pub const Iterator = @import("iter.zig");
+/// Represent [fentry/fexit](https://docs.kernel.org/trace/fprobe.html) in bpf program.
 pub const Fentry = @import("fentry.zig");
+/// Represent [kprobe/kretprobe](https://docs.kernel.org/trace/kprobes.html?highlight=kprobe) in bpf program.
 pub const Kprobe = @import("kprobe.zig");
+/// Represent syscall in bpf program.
 pub const Ksyscall = @import("ksyscall.zig");
+/// Argument retriever according to different context.
 pub const Args = @import("args.zig");
+/// Represent XDP in bpf program.
 pub const Xdp = @import("xdp.zig");
 
 const std = @import("std");
@@ -13,6 +21,10 @@ const builtin = std.builtin;
 const SourceLocation = builtin.SourceLocation;
 const StackTrace = builtin.StackTrace;
 
+/// Exit current bpf program with the location information (by @src()) and
+/// error return value (this is usually the return value of bpf helpers).
+///
+/// These information will be dumped in the kernel's trace buffer.
 pub inline fn exit(comptime src: SourceLocation, ret: anytype) noreturn {
     const fmt = "error occur at %s:%d return %d";
     const file = @as(*const [src.file.len:0]u8, @ptrCast(src.file)).*;
@@ -28,6 +40,13 @@ pub inline fn exit(comptime src: SourceLocation, ret: anytype) noreturn {
     unreachable;
 }
 
+/// Default implementation of panic handler for bpf
+/// you could register with Zig by writing the following in your bpf program:
+/// ```
+/// pub const panic = bpf.panic;
+/// ```
+/// Currently, it will only print the panic message in kernel's trace buffer
+/// and exit current bpf program.
 pub fn panic(msg: []const u8, error_return_trace: ?*StackTrace, ret_addr: ?usize) noreturn {
     _ = error_return_trace;
     _ = ret_addr;

@@ -24,6 +24,7 @@ const in_bpf_program = switch (@import("builtin").cpu.arch) {
     else => false,
 };
 
+/// Return argument context according to the specified kernel function prototype.
 pub fn Ctx(comptime func_name: []const u8) type {
     const f = @typeInfo(@TypeOf(@field(vmlinux, "_zig_" ++ func_name)));
     comptime var fields: []const StructField = &.{};
@@ -60,6 +61,7 @@ pub fn Ctx(comptime func_name: []const u8) type {
     });
 }
 
+/// Represent `struct pt_regs` for different architectures.
 pub const REGS = extern struct {
     const Self = @This();
     impl: switch (arch) {
@@ -68,6 +70,7 @@ pub const REGS = extern struct {
         else => @panic("toto"),
     },
 
+    /// return pointer to the arg0 in the pt_regs.
     pub fn arg0_ptr(self: *Self) *c_ulong {
         return switch (arch) {
             .x86_64 => &self.impl.di,
@@ -78,6 +81,7 @@ pub const REGS = extern struct {
         };
     }
 
+    /// return pointer to the arg1 in the pt_regs.
     pub fn arg1_ptr(self: *Self) *c_ulong {
         return switch (arch) {
             .x86_64 => &self.impl.si,
@@ -88,6 +92,7 @@ pub const REGS = extern struct {
         };
     }
 
+    /// return pointer to the arg2 in the pt_regs.
     pub fn arg2_ptr(self: *Self) *c_ulong {
         return switch (arch) {
             .x86_64 => &self.impl.dx,
@@ -98,6 +103,7 @@ pub const REGS = extern struct {
         };
     }
 
+    /// return pointer to the arg3 in the pt_regs.
     pub fn arg3_ptr(self: *Self, for_syscall: bool) *c_ulong {
         return switch (arch) {
             .x86_64 => if (for_syscall) &self.impl.r10 else &self.impl.cx,
@@ -108,6 +114,7 @@ pub const REGS = extern struct {
         };
     }
 
+    /// return pointer to the arg4 in the pt_regs.
     pub fn arg4_ptr(self: *Self) *c_ulong {
         return switch (arch) {
             .x86_64 => &self.impl.r8,
@@ -118,6 +125,7 @@ pub const REGS = extern struct {
         };
     }
 
+    /// return pointer to the return value in the pt_regs.
     pub fn ret_ptr(self: *Self) *c_ulong {
         return switch (arch) {
             .x86_64 => &self.impl.ax,
@@ -129,11 +137,13 @@ pub const REGS = extern struct {
     }
 };
 
+/// Check if the type is ?*T or *T.
 pub inline fn is_pointer(comptime typ: type) bool {
     const ti = @typeInfo(typ);
     return ti == .Pointer or (ti == .Optional and @typeInfo(ti.Optional.child) == .Pointer);
 }
 
+/// Cast `c_ulong` value into the corresponding type.
 pub fn cast(comptime T: type, rc: c_ulong) T {
     if (is_pointer(T)) return @ptrFromInt(rc);
 
@@ -148,12 +158,16 @@ pub fn cast(comptime T: type, rc: c_ulong) T {
     return rc;
 }
 
+/// Return the actual type to retrive arguments for the specified kernel function.
+/// As syscall function has different retrieving method than regular kernel function,
+/// this will hide the underlying mechanism to provider a consistent API.
 pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type {
     const f = @typeInfo(@TypeOf(@field(vmlinux, func_name)));
 
     return opaque {
         const Self = @This();
 
+        /// helper function to return the underlying `REG`.
         pub inline fn get_regs(self: *Self) *REGS {
             return @alignCast(@ptrCast(self));
         }
@@ -244,6 +258,7 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
     };
 }
 
+/// A Wrapper type for syscall arguments retrieving.
 pub fn SYSCALL(comptime name: []const u8) type {
     const func_name = "sys_" ++ name;
     if (!@hasDecl(vmlinux, func_name))
@@ -254,6 +269,7 @@ pub fn SYSCALL(comptime name: []const u8) type {
     return opaque {
         const Self = @This();
 
+        /// helper function to get underlying `PT_REGS`.
         pub inline fn get_arg_ctx(self: *Self) *T {
             if (!in_bpf_program) return @ptrCast(self);
 
@@ -313,6 +329,7 @@ pub fn SYSCALL(comptime name: []const u8) type {
     };
 }
 
+/// Structure passing from BPF side to userspace for tracing.
 pub const TRACE_RECORD = extern struct {
     id: u32,
     tpid: u64,

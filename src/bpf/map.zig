@@ -7,12 +7,17 @@ const Declaration = std.builtin.Type.Declaration;
 const vmlinux = @import("vmlinux");
 const exit = @import("root.zig").exit;
 
+/// BPF map updating strategy.
 pub const MapUpdateType = enum(u64) {
+    /// Don't check if the key exists when updating.
     any = std.os.linux.BPF.ANY,
+    /// The key shouldn't exist when updating, otherwise updating will bail out.
     noexist = std.os.linux.BPF.NOEXIST,
+    /// The key should exist when updating, otherwise updating will bail out.
     exist = std.os.linux.BPF.EXIST,
 };
 
+/// Common abstraction of all kinds of maps.
 fn Map(
     comptime name: []const u8,
     comptime map_type: MapType,
@@ -113,6 +118,7 @@ fn Map(
     };
 }
 
+/// Represent `BPF_MAP_TYPE_HASH`.
 pub fn HashMap(
     comptime name: []const u8,
     comptime Key: type,
@@ -125,24 +131,33 @@ pub fn HashMap(
 
         const Self = @This();
 
+        /// Initialization
         pub fn init() Self {
             return .{ .map = .{} };
         }
 
+        /// Return the pointer to the entry associated with the key.
+        /// If not existing, return `null`.
+        /// If any error happens, current program will exit immediately.
         pub fn lookup(self: *const Self, key: Key) ?*Value {
             return self.map.lookup(key);
         }
 
+        /// Update the entry associated with key according to the specified strategy.
+        /// If any error happens, current program will exit immediately.
         pub fn update(self: *const Self, update_type: MapUpdateType, key: Key, value: Value) void {
             return self.map.update(update_type, key, value);
         }
 
+        /// Delete the entry associated with the key.
+        /// If any error happens, current program will exit immediately.
         pub fn delete(self: *const Self, key: Key) void {
             return self.map.delete(key);
         }
     };
 }
 
+/// Represent `BPF_MAP_TYPE_ARRAY`.
 pub fn ArrayMap(
     comptime name: []const u8,
     comptime Value: type,
@@ -154,20 +169,27 @@ pub fn ArrayMap(
 
         const Self = @This();
 
+        /// Initialization.
         pub fn init() Self {
             return .{ .map = .{} };
         }
 
-        pub fn lookup(self: *const Self, key: u32) ?*const Value {
-            return self.map.lookup(key);
+        /// Return the pointer to the entry at index.
+        /// If index out of range, return `null`.
+        /// If any error happens, current program will exit immediately.
+        pub fn lookup(self: *const Self, index: u32) ?*Value {
+            return self.map.lookup(index);
         }
 
-        pub fn update(self: *const Self, update_type: MapUpdateType, key: u32, value: Value) void {
-            return self.map.update(update_type, key, value);
+        /// Update the entry at index according to the specified strategy.
+        /// If any error happens, current program will exit immediately.
+        pub fn update(self: *const Self, update_type: MapUpdateType, index: u32, value: Value) void {
+            return self.map.update(update_type, index, value);
         }
     };
 }
 
+/// Represent `BPF_MAP_TYPE_PERF_EVENT_ARRAY`.
 pub fn PerfEventArray(
     comptime name: []const u8,
     comptime max_entries: u32,
@@ -178,10 +200,14 @@ pub fn PerfEventArray(
 
         const Self = @This();
 
+        /// Initialization.
         pub fn init() Self {
             return .{ .map = .{} };
         }
 
+        /// Publish an event to a specified CPU (with index != null) or current CPU (with idex == null)
+        /// `ctx` is the current program context, usually got from program's parameter.
+        /// If any error happens, current program will exit immediately.
         pub fn event_output(self: *const Self, ctx: anytype, index: ?u64, data: []const u8) void {
             const rc = helpers.perf_event_output(ctx, @ptrCast(&@TypeOf(self.map).def), if (index) |i| i else vmlinux.BPF_F_CURRENT_CPU, @constCast(data.ptr), data.len);
             return switch (rc) {
@@ -192,12 +218,17 @@ pub fn PerfEventArray(
     };
 }
 
+/// Ring buffer notify strategy
 pub const RingBufNotify = enum {
+    /// Let BPF framework decide whether to send data availiability notification to userspace.
     auto,
+    /// Notification of new data availability is sent unconditionally.
     force_notify,
+    /// No notification of new data availability is sent.
     not_notify,
 };
 
+/// Represent [BPF ring buffer](https://www.kernel.org/doc/html/next/bpf/ringbuf.html)
 pub fn RingBuffer(
     comptime name: []const u8,
     comptime number_of_pages: u32,
@@ -208,10 +239,13 @@ pub fn RingBuffer(
 
         const Self = @This();
 
+        /// Initialization.
         pub fn init() Self {
             return .{ .map = .{} };
         }
 
+        /// Mimic perf event output
+        /// If any error happens, current program will exit immediately.
         pub fn event_output(self: *const Self, data: []const u8, notify: RingBufNotify) void {
             const rc = helpers.ringbuf_output(&@TypeOf(self.map).def, @constCast(data.ptr), data.len, switch (notify) {
                 .auto => 0,
@@ -224,9 +258,13 @@ pub fn RingBuffer(
             };
         }
 
+        /// Reserve a space of type `T` in the ring buffer.
+        /// If any error happens, current program will exit immediately.
         pub fn reserve(self: *const Self, comptime T: type) struct {
+            /// Pointer to the allocated space.
             data_ptr: *T,
 
+            /// Submit reserved ring buffer sample, pointed to by `data_ptr`.
             pub fn commit(s: *const @This()) void {
                 helpers.ringbuf_submit(s.data_ptr, 0);
             }
