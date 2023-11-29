@@ -257,7 +257,7 @@ fn create_mounting_tracefs_step(b: *Builder) *Builder.Step {
 
 fn create_vmlinux(b: *Builder) *Builder.Module {
     const target = std.zig.CrossTarget.fromTarget(builtin.target);
-    const optimize: std.builtin.Mode = .ReleaseFast;
+    const optimize: std.builtin.Mode = .Debug;
 
     const libbpf = create_libbpf(b, target, optimize);
     const exe = b.addExecutable(.{
