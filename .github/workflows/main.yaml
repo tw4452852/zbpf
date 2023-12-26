@@ -24,4 +24,4 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: goto-bus-stop/setup-zig@v2
-      - run: zig fmt --check build.zig src/bpf/*.zig src/tests/*.zig samples/*.zig src/vmlinux_dumper/*.zig src/*.zig src/docs/*.zig
+      - run: zig fmt --check build.zig.zon build.zig src/bpf/*.zig src/tests/*.zig samples/*.zig src/vmlinux_dumper/*.zig src/*.zig src/docs/*.zig
