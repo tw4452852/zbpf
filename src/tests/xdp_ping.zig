@@ -53,17 +53,27 @@ test "xdp_ping" {
     var buf: [16]u8 = undefined;
     const pattern = try std.fmt.bufPrint(&buf, "{x}", .{expected});
     var result = try std.ChildProcess.run(.{ .allocator = allocator, .argv = &.{ "ping", "-4", "-c", "1", "-p", pattern, "-s", "4", "localhost" } });
-    //print("{s}\n{s}\n", .{ result.stdout, result.stderr });
-    allocator.free(result.stdout);
-    allocator.free(result.stderr);
-    try testing.expect(result.term.Exited == 0);
+    if (testing.expect(result.term.Exited == 0)) |_| {
+        allocator.free(result.stdout);
+        allocator.free(result.stderr);
+    } else |err| {
+        print("{s}\n{s}\n", .{ result.stdout, result.stderr });
+        allocator.free(result.stdout);
+        allocator.free(result.stderr);
+        return err;
+    }
 
     const pattern6 = try std.fmt.bufPrint(&buf, "{x}", .{expected6});
     result = try std.ChildProcess.run(.{ .allocator = allocator, .argv = &.{ "ping", "-6", "-c", "1", "-p", pattern6, "-s", "4", "localhost" } });
-    //print("{s}\n{s}\n", .{ result.stdout, result.stderr });
-    allocator.free(result.stdout);
-    allocator.free(result.stderr);
-    try testing.expect(result.term.Exited == 0);
+    if (testing.expect(result.term.Exited == 0)) |_| {
+        allocator.free(result.stdout);
+        allocator.free(result.stderr);
+    } else |err| {
+        print("{s}\n{s}\n", .{ result.stdout, result.stderr });
+        allocator.free(result.stdout);
+        allocator.free(result.stderr);
+        return err;
+    }
 
     var k: u32 = 0;
     var v: u32 = undefined;
