@@ -23,11 +23,20 @@ pub fn btf_name_exist(name: []const u8) bool {
 
 const tracefs_mount_dir = "./tracefs";
 
-pub fn open_tracebuf_pipe() !std.fs.File {
+pub fn open_tracebuf_pipe(clean: bool) !std.fs.File {
     const cwd = std.fs.cwd();
     try cwd.makeDir(tracefs_mount_dir);
     const ret = std.os.linux.getErrno(std.os.linux.mount("zbpf_test", tracefs_mount_dir, "tracefs", 0, 0));
     if (ret != .SUCCESS) return error.MOUNT;
+
+    // clean trace buffer if request
+    if (clean) {
+        try cwd.writeFile2(.{
+            .sub_path = tracefs_mount_dir ++ "/trace",
+            .data = "\n",
+            .flags = .{},
+        });
+    }
 
     return try cwd.openFile(tracefs_mount_dir ++ "/trace_pipe", .{});
 }

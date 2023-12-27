@@ -26,6 +26,9 @@ test "panic" {
     }
 
     if (libbpf.bpf_object__next_program(obj, null)) |prog| {
+        const f = try root.open_tracebuf_pipe(true);
+        defer root.close_tracebuf_pipe(f);
+
         // run bpf program
         const fd = libbpf.bpf_program__fd(prog);
         var attr = std.mem.zeroInit(libbpf.bpf_test_run_opts, .{
@@ -38,8 +41,6 @@ test "panic" {
         }
         try testing.expectEqual(@as(c_long, 0), attr.retval);
 
-        const f = try root.open_tracebuf_pipe();
-        defer root.close_tracebuf_pipe(f);
         const r = f.reader();
         const l = try r.readUntilDelimiterAlloc(allocator, '\n', std.math.maxInt(u32));
         defer allocator.free(l);
