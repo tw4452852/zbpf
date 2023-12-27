@@ -101,11 +101,11 @@ fn generate_syscall(comptime name: []const u8, comptime id: u32) type {
 }
 
 comptime {
-    inline for (kprobes, 0..) |f, i| {
+    for (kprobes, 0..) |f, i| {
         _ = generate_kprobe(f, i);
     }
 
-    inline for (syscalls, kprobes.len..) |f, i| {
+    for (syscalls, kprobes.len..) |f, i| {
         _ = generate_syscall(f, i);
     }
 }
