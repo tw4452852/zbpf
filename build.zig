@@ -37,9 +37,8 @@ fn create_libbpf(b: *Builder, target: std.zig.CrossTarget, optimize: std.builtin
 
 fn create_vmlinux(b: *Builder) *Builder.Module {
     // build for native
-    const target = std.zig.CrossTarget.fromTarget(builtin.target);
-    // https://github.com/ziglang/zig/issues/18153
-    const optimize: std.builtin.Mode = .Debug;
+    const target = std.zig.CrossTarget{};
+    const optimize: std.builtin.Mode = .ReleaseFast;
 
     const libbpf = create_libbpf(b, target, optimize);
     const exe = b.addExecutable(.{
