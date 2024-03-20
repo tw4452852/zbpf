@@ -53,7 +53,7 @@ pub fn Ctx(comptime func_name: []const u8) type {
 
     return @Type(.{
         .Struct = .{
-            .layout = .Extern,
+            .layout = .@"extern",
             .is_tuple = false,
             .fields = fields,
             .decls = &.{},

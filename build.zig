@@ -161,8 +161,8 @@ fn create_test_step(ctx: *const Ctx) !void {
         .root_source_file = .{ .path = "src/tests/root.zig" },
         .target = ctx.target,
         .optimize = ctx.optimize,
+        .filter = ctx.b.option([]const u8, "test", "test filter"),
     });
-    exe_tests.filter = ctx.b.option([]const u8, "test", "test filter");
     exe_tests.linkLibrary(ctx.libbpf_step);
     exe_tests.root_module.addImport("bpf", ctx.bpf);
     exe_tests.linkLibC();

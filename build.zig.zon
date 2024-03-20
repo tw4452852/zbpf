@@ -1,11 +1,11 @@
 .{
     .name = "zbpf",
-    .version = "0.1.1",
+    .version = "0.1.2",
     .paths = .{""},
     .dependencies = .{
         .libbpf = .{
-            .url = "https://github.com/tw4452852/libbpf_zig/archive/refs/tags/1.3.0-1.tar.gz",
-            .hash = "12208a5f09eb6d53e6231b390731f0719016fbc5f357252b70c2b254ac63eadbe718",
+            .url = "https://github.com/tw4452852/libbpf_zig/archive/refs/tags/1.3.0-2.tar.gz",
+            .hash = "1220a432cc9487a4ee27d854c6cadfe4f5fcff061a7dba73b0e64ef4f61323ed52a3",
         },
     },
 }

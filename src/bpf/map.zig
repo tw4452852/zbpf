@@ -64,7 +64,7 @@ fn Map(
 
     const Def = @Type(.{
         .Struct = .{
-            .layout = .Extern,
+            .layout = .@"extern",
             .is_tuple = false,
             .fields = &fields,
             .decls = &[_]Declaration{},
