@@ -24,7 +24,7 @@ pub const Meta = extern struct {
 
     /// Get the pointer to the specified offset in the packet with type casting.
     /// If the offset beyonds the end of the packet, return `null`.
-    pub fn get_ptr(self: *Meta, comptime T: type, offset: u32) ?*T {
+    pub fn get_ptr(self: *Meta, comptime T: type, offset: usize) ?*T {
         const ptr: usize = self.data_begin + offset;
 
         if (ptr + @sizeOf(T) > self.data_end) return null;
