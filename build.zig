@@ -189,7 +189,7 @@ fn create_test_step(ctx: *const Ctx) !void {
 fn create_docs_step(ctx: *const Ctx) !void {
     const exe = ctx.b.addObject(.{
         .name = "docs",
-        .root_source_file = .{ .path = "src/docs/docs.zig" },
+        .root_source_file = .{ .path = "src/bpf/root.zig" },
         .target = ctx.target,
         .optimize = ctx.optimize,
     });
