@@ -26,7 +26,7 @@ const tracefs_mount_dir = "./tracefs";
 pub fn open_tracebuf_pipe(clean: bool) !std.fs.File {
     const cwd = std.fs.cwd();
     try cwd.makeDir(tracefs_mount_dir);
-    const ret = std.os.linux.getErrno(std.os.linux.mount("zbpf_test", tracefs_mount_dir, "tracefs", 0, 0));
+    const ret = std.posix.errno(std.os.linux.mount("zbpf_test", tracefs_mount_dir, "tracefs", 0, 0));
     if (ret != .SUCCESS) return error.MOUNT;
 
     // clean trace buffer if request
@@ -43,7 +43,7 @@ pub fn open_tracebuf_pipe(clean: bool) !std.fs.File {
 
 pub fn close_tracebuf_pipe(f: std.fs.File) void {
     f.close();
-    const ret = std.os.linux.getErrno(std.os.linux.umount(tracefs_mount_dir));
+    const ret = std.posix.errno(std.os.linux.umount(tracefs_mount_dir));
     if (ret != .SUCCESS) @panic(@tagName(ret));
     std.fs.cwd().deleteDir(tracefs_mount_dir) catch unreachable;
 }

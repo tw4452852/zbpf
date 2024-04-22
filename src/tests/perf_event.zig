@@ -14,14 +14,14 @@ test "perf_event" {
 
     const obj = libbpf.bpf_object__open_mem(bytes.ptr, bytes.len, null);
     if (obj == null) {
-        print("failed to open bpf object: {}\n", .{std.os.errno(-1)});
+        print("failed to open bpf object: {}\n", .{std.posix.errno(-1)});
         return error.OPEN;
     }
     defer libbpf.bpf_object__close(obj);
 
     var ret = libbpf.bpf_object__load(obj);
     if (ret != 0) {
-        print("failed to load bpf object: {}\n", .{std.os.errno(-1)});
+        print("failed to load bpf object: {}\n", .{std.posix.errno(-1)});
         return error.LOAD;
     }
 
@@ -32,12 +32,12 @@ test "perf_event" {
         const v: u32 = std.Thread.getCurrentId();
         ret = libbpf.bpf_map__update_elem(my_pid, &k, @sizeOf(@TypeOf(k)), &v, @sizeOf(@TypeOf(v)), 0);
         if (ret != 0) {
-            print("failed update map element: {}\n", .{std.os.errno(-1)});
+            print("failed update map element: {}\n", .{std.posix.errno(-1)});
             return error.MAP_UPDATE;
         }
 
         const link = libbpf.bpf_program__attach(prog) orelse {
-            print("failed to attach prog {s}: {}\n", .{ libbpf.bpf_program__name(prog), std.os.errno(-1) });
+            print("failed to attach prog {s}: {}\n", .{ libbpf.bpf_program__name(prog), std.posix.errno(-1) });
             return error.ATTACH;
         };
         defer _ = libbpf.bpf_link__destroy(link);
@@ -61,7 +61,7 @@ test "perf_event" {
 
         ret = libbpf.perf_buffer__consume(perf_buf);
         if (ret != 0) {
-            print("failed consume perf buffer: {}\n", .{std.os.errno(-1)});
+            print("failed consume perf buffer: {}\n", .{std.posix.errno(-1)});
             return error.PERF_BUF;
         }
 

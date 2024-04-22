@@ -14,14 +14,14 @@ test "trace_printk" {
 
     const obj = libbpf.bpf_object__open_mem(bytes.ptr, bytes.len, null);
     if (obj == null) {
-        print("failed to open bpf object: {}\n", .{std.os.errno(-1)});
+        print("failed to open bpf object: {}\n", .{std.posix.errno(-1)});
         return error.OPEN;
     }
     defer libbpf.bpf_object__close(obj);
 
     var ret = libbpf.bpf_object__load(obj);
     if (ret != 0) {
-        print("failed to load bpf object: {}\n", .{std.os.errno(-1)});
+        print("failed to load bpf object: {}\n", .{std.posix.errno(-1)});
         return error.LOAD;
     }
 
@@ -39,7 +39,7 @@ test "trace_printk" {
         });
         ret = libbpf.bpf_prog_test_run_opts(fd, &attr);
         if (ret != 0) {
-            print("failed run prog: {}\n", .{std.os.errno(-1)});
+            print("failed run prog: {}\n", .{std.posix.errno(-1)});
             return error.RUN;
         }
         try testing.expectEqual(std.fmt.count("{}", .{arg}), attr.retval);

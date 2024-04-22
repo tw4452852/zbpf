@@ -57,7 +57,7 @@ fn create_vmlinux(b: *std.Build) *std.Build.Module {
     const stdout = run_exe.captureStdOut();
     const vmlinux_h = b.addInstallFile(stdout, "vmlinux.h");
     const zigify = b.addTranslateC(.{
-        .root_source_file = .{ .path = vmlinux_h.dest_builder.getInstallPath(vmlinux_h.dir, vmlinux_h.dest_rel_path) },
+        .root_source_file = .{ .path = b.getInstallPath(vmlinux_h.dir, vmlinux_h.dest_rel_path) },
         .target = target,
         .optimize = optimize,
     });

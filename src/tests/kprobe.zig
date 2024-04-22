@@ -14,14 +14,14 @@ test "kprobe" {
 
     const obj = libbpf.bpf_object__open_mem(bytes.ptr, bytes.len, null);
     if (obj == null) {
-        print("failed to open bpf object: {}\n", .{std.os.errno(-1)});
+        print("failed to open bpf object: {}\n", .{std.posix.errno(-1)});
         return error.OPEN;
     }
     defer libbpf.bpf_object__close(obj);
 
     var ret = libbpf.bpf_object__load(obj);
     if (ret != 0) {
-        print("failed to load bpf object: {}\n", .{std.os.errno(-1)});
+        print("failed to load bpf object: {}\n", .{std.posix.errno(-1)});
         return error.LOAD;
     }
 
@@ -32,12 +32,12 @@ test "kprobe" {
     const rc = libbpf.bpf_object__find_map_by_name(obj, "exit").?;
 
     const entry_link = libbpf.bpf_program__attach(entry_prog) orelse {
-        print("failed to attach entry_prog {s}: {}\n", .{ libbpf.bpf_program__name(entry_prog), std.os.errno(-1) });
+        print("failed to attach entry_prog {s}: {}\n", .{ libbpf.bpf_program__name(entry_prog), std.posix.errno(-1) });
         return error.ATTACH;
     };
     defer _ = libbpf.bpf_link__destroy(entry_link);
     const exit_link = libbpf.bpf_program__attach(exit_prog) orelse {
-        print("failed to attach prog {s}: {}\n", .{ libbpf.bpf_program__name(exit_prog), std.os.errno(-1) });
+        print("failed to attach prog {s}: {}\n", .{ libbpf.bpf_program__name(exit_prog), std.posix.errno(-1) });
         return error.ATTACH;
     };
     defer _ = libbpf.bpf_link__destroy(exit_link);
@@ -50,13 +50,13 @@ test "kprobe" {
     var got_entry: u64 = undefined;
     ret = libbpf.bpf_map__lookup_elem(arg2, &k, @sizeOf(@TypeOf(k)), &got_entry, @sizeOf(@TypeOf(got_entry)), 0);
     if (ret != 0) {
-        print("failed loopup map element: {}\n", .{std.os.errno(-1)});
+        print("failed loopup map element: {}\n", .{std.posix.errno(-1)});
         return error.MAP_LOOKUP;
     }
     var got_ret: isize = undefined;
     ret = libbpf.bpf_map__lookup_elem(rc, &k, @sizeOf(@TypeOf(k)), &got_ret, @sizeOf(@TypeOf(got_ret)), 0);
     if (ret != 0) {
-        print("failed loopup map element: {}\n", .{std.os.errno(-1)});
+        print("failed loopup map element: {}\n", .{std.posix.errno(-1)});
         return error.MAP_LOOKUP;
     }
 

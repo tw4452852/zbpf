@@ -17,14 +17,14 @@ test "kmulprobe" {
 
     const obj = libbpf.bpf_object__open_mem(bytes.ptr, bytes.len, null);
     if (obj == null) {
-        print("failed to open bpf object: {}\n", .{std.os.errno(-1)});
+        print("failed to open bpf object: {}\n", .{std.posix.errno(-1)});
         return error.OPEN;
     }
     defer libbpf.bpf_object__close(obj);
 
     const ret = libbpf.bpf_object__load(obj);
     if (ret != 0) {
-        print("failed to load bpf object: {}\n", .{std.os.errno(-1)});
+        print("failed to load bpf object: {}\n", .{std.posix.errno(-1)});
         return error.LOAD;
     }
 
@@ -52,14 +52,14 @@ test "kmulprobe" {
         .retprobe = false,
     };
     const entry_link = libbpf.bpf_program__attach_kprobe_multi_opts(entry_prog, null, @ptrCast(&opt)) orelse {
-        print("failed to attach entry_prog {s}: {}\n", .{ libbpf.bpf_program__name(entry_prog), std.os.errno(-1) });
+        print("failed to attach entry_prog {s}: {}\n", .{ libbpf.bpf_program__name(entry_prog), std.posix.errno(-1) });
         return error.ATTACH;
     };
     defer _ = libbpf.bpf_link__destroy(entry_link);
 
     opt.retprobe = true;
     const exit_link = libbpf.bpf_program__attach_kprobe_multi_opts(exit_prog, null, @ptrCast(&opt)) orelse {
-        print("failed to attach prog {s}: {}\n", .{ libbpf.bpf_program__name(exit_prog), std.os.errno(-1) });
+        print("failed to attach prog {s}: {}\n", .{ libbpf.bpf_program__name(exit_prog), std.posix.errno(-1) });
         return error.ATTACH;
     };
     defer _ = libbpf.bpf_link__destroy(exit_link);
@@ -84,7 +84,7 @@ test "kmulprobe" {
 
     const n = libbpf.ring_buffer__consume(ring_buf);
     if (n != expected_count) {
-        print("failed consume ring buffer: return {}, expect {}, err:{}\n", .{ n, expected_count, std.os.errno(-1) });
+        print("failed consume ring buffer: return {}, expect {}, err:{}\n", .{ n, expected_count, std.posix.errno(-1) });
         return error.PERF_BUF;
     }
 

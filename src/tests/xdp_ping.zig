@@ -18,14 +18,14 @@ test "xdp_ping" {
 
     const obj = libbpf.bpf_object__open_mem(bytes.ptr, bytes.len, null);
     if (obj == null) {
-        print("failed to open bpf object: {}\n", .{std.os.errno(-1)});
+        print("failed to open bpf object: {}\n", .{std.posix.errno(-1)});
         return error.OPEN;
     }
     defer libbpf.bpf_object__close(obj);
 
     var ret = libbpf.bpf_object__load(obj);
     if (ret != 0) {
-        print("failed to load bpf object: {}\n", .{std.os.errno(-1)});
+        print("failed to load bpf object: {}\n", .{std.posix.errno(-1)});
         return error.LOAD;
     }
 
@@ -35,14 +35,14 @@ test "xdp_ping" {
 
     const idx = c.if_nametoindex("lo");
     if (idx == 0) {
-        print("failed to get index of lo: {}\n", .{std.os.errno(-1)});
+        print("failed to get index of lo: {}\n", .{std.posix.errno(-1)});
         return error.DEV;
     }
 
     const prog_fd = libbpf.bpf_program__fd(prog);
     ret = libbpf.bpf_xdp_attach(@intCast(idx), prog_fd, c.XDP_FLAGS_UPDATE_IF_NOEXIST, null);
     if (ret < 0) {
-        print("failed to attach program: {}\n", .{std.os.errno(-1)});
+        print("failed to attach program: {}\n", .{std.posix.errno(-1)});
         return error.ATTACH;
     }
     defer _ = libbpf.bpf_xdp_detach(@intCast(idx), c.XDP_FLAGS_UPDATE_IF_NOEXIST, null);

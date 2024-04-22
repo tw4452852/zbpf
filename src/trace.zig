@@ -63,14 +63,14 @@ pub fn main() !void {
 
     const obj = libbpf.bpf_object__open_mem(bytes.ptr, bytes.len, null);
     if (obj == null) {
-        print("failed to open bpf object: {}\n", .{std.os.errno(-1)});
+        print("failed to open bpf object: {}\n", .{std.posix.errno(-1)});
         return error.OPEN;
     }
     defer libbpf.bpf_object__close(obj);
 
     var ret = libbpf.bpf_object__load(obj);
     if (ret != 0) {
-        print("failed to load bpf object: {}\n", .{std.os.errno(-1)});
+        print("failed to load bpf object: {}\n", .{std.posix.errno(-1)});
         return error.LOAD;
     }
 
@@ -85,7 +85,7 @@ pub fn main() !void {
     var cur_prog: ?*libbpf.bpf_program = null;
     while (libbpf.bpf_object__next_program(obj, cur_prog)) |prog| : (cur_prog = prog) {
         try links.append(libbpf.bpf_program__attach(prog) orelse {
-            print("failed to attach prog {s}: {}\n", .{ libbpf.bpf_program__name(prog), std.os.errno(-1) });
+            print("failed to attach prog {s}: {}\n", .{ libbpf.bpf_program__name(prog), std.posix.errno(-1) });
             return error.ATTACH;
         });
     }
@@ -120,12 +120,12 @@ fn interrupt_handler(_: c_int) callconv(.C) void {
 }
 
 fn setup_ctrl_c() !void {
-    const act = std.os.Sigaction{
+    const act = std.posix.Sigaction{
         .handler = .{ .handler = interrupt_handler },
-        .mask = std.os.empty_sigset,
+        .mask = std.posix.empty_sigset,
         .flags = 0,
     };
-    try std.os.sigaction(std.os.SIG.INT, &act, null);
+    try std.posix.sigaction(std.posix.SIG.INT, &act, null);
 }
 
 const Ctx = struct {

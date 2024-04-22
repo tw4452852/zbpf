@@ -21,7 +21,7 @@ pub fn main() !void {
     _ = it.skip(); // skip process name
     const btf = if (it.next()) |vmlinux| libbpf.btf__parse(vmlinux, null) else libbpf.btf__load_vmlinux_btf();
     if (btf == null) {
-        print("failed to get BTF: {}\n", .{std.os.errno(-1)});
+        print("failed to get BTF: {}\n", .{std.posix.errno(-1)});
         return error.PARSE;
     }
 
@@ -29,7 +29,7 @@ pub fn main() !void {
 
     const d = libbpf.btf_dump__new(btf, btf_dump_printf, @ptrFromInt(@as(usize, @intCast(stdout.handle))), null);
     if (d == null) {
-        print("failed to create btf dumper: {}\n", .{std.os.errno(-1)});
+        print("failed to create btf dumper: {}\n", .{std.posix.errno(-1)});
         return error.DUMP;
     }
     defer libbpf.btf_dump__free(d);
@@ -38,7 +38,7 @@ pub fn main() !void {
     for (0..n) |i| {
         const err = libbpf.btf_dump__dump_type(d, @intCast(i));
         if (err != 0) {
-            print("failed to dump {}th btf type: {}\n", .{ i, std.os.errno(-1) });
+            print("failed to dump {}th btf type: {}\n", .{ i, std.posix.errno(-1) });
             return error.DUMP;
         }
     }
@@ -66,7 +66,7 @@ pub fn main() !void {
             });
             const err = libbpf.btf_dump__emit_type_decl(d, t[0].unnamed_0.type, @ptrCast(&opt));
             if (err != 0) {
-                print("failed to dump {}th btf type: {} for function {s}\n", .{ i, std.os.errno(-1), func_name });
+                print("failed to dump {}th btf type: {} for function {s}\n", .{ i, std.posix.errno(-1), func_name });
                 return error.DUMP;
             }
             try std.fmt.format(stdout, ";\n", .{});
