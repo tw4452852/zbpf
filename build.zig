@@ -156,12 +156,13 @@ fn create_target_step(ctx: *const Ctx, main_path: []const u8, prog_path: []const
 }
 
 fn create_test_step(ctx: *const Ctx) !void {
+    const filter = ctx.b.option([]const u8, "test", "test filter");
     // Creates a step for unit testing.
     const exe_tests = ctx.b.addTest(.{
         .root_source_file = .{ .path = "src/tests/root.zig" },
         .target = ctx.target,
         .optimize = ctx.optimize,
-        .filter = ctx.b.option([]const u8, "test", "test filter"),
+        .filter = filter,
     });
     exe_tests.linkLibrary(ctx.libbpf_step);
     exe_tests.root_module.addImport("bpf", ctx.bpf);
@@ -173,6 +174,11 @@ fn create_test_step(ctx: *const Ctx) !void {
     defer sample_dir.close();
     var it = sample_dir.iterate();
     while (try it.next()) |entry| {
+        if (filter) |f| {
+            if (!std.mem.containsAtLeast(u8, entry.name, 1, f)) {
+                continue;
+            }
+        }
         const bpf_prog = create_bpf_prog(ctx, try fs.path.join(ctx.b.allocator, &[_][]const u8{ "samples", entry.name }));
         exe_tests.root_module.addAnonymousImport(try std.fmt.allocPrint(ctx.b.allocator, "@{s}", .{fs.path.stem(entry.name)}), .{
             .root_source_file = bpf_prog.getEmittedBin(),
