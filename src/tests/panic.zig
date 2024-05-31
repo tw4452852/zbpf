@@ -6,9 +6,7 @@ const allocator = root.allocator;
 const libbpf = root.libbpf;
 
 test "panic" {
-    const obj_bytes = @embedFile("@panic");
-    const bytes = try allocator.dupe(u8, obj_bytes);
-    defer allocator.free(bytes);
+    const bytes = @embedFile("@panic");
 
     _ = libbpf.libbpf_set_print(root.dbg_printf);
 

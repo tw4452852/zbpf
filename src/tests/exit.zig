@@ -6,13 +6,11 @@ const allocator = root.allocator;
 const libbpf = root.libbpf;
 
 test "exit" {
-    const obj_bytes = @embedFile("@exit");
-    const bytes = try allocator.dupe(u8, obj_bytes);
-    defer allocator.free(bytes);
+    const bytes = @embedFile("@exit");
 
     _ = libbpf.libbpf_set_print(root.dbg_printf);
 
-    const obj = libbpf.bpf_object__open_mem(bytes.ptr, bytes.len, null);
+    const obj = libbpf.bpf_object__open_mem(bytes, bytes.len, null);
     if (obj == null) {
         print("failed to open bpf object: {}\n", .{std.posix.errno(-1)});
         return error.OPEN;

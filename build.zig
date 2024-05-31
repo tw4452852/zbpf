@@ -55,7 +55,7 @@ fn create_vmlinux(b: *std.Build) *std.Build.Module {
     const stdout = run_exe.captureStdOut();
     const vmlinux_h = b.addInstallFile(stdout, "vmlinux.h");
     const zigify = b.addTranslateC(.{
-        .root_source_file = .{.cwd_relative = b.getInstallPath(vmlinux_h.dir, vmlinux_h.dest_rel_path)},
+        .root_source_file = .{ .cwd_relative = b.getInstallPath(vmlinux_h.dir, vmlinux_h.dest_rel_path) },
         .target = target,
         .optimize = optimize,
     });
@@ -83,7 +83,8 @@ const Ctx = struct {
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
+    // WA for pointer alignment assumption of libbpf
+    const optimize: std.builtin.OptimizeMode = .ReleaseFast;
 
     const libbpf = create_libbpf(b, target, optimize);
 

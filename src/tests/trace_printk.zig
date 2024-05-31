@@ -6,9 +6,7 @@ const allocator = root.allocator;
 const libbpf = root.libbpf;
 
 test "trace_printk" {
-    const obj_bytes = @embedFile("@trace_printk");
-    const bytes = try allocator.dupe(u8, obj_bytes);
-    defer allocator.free(bytes);
+    const bytes = @embedFile("@trace_printk");
 
     _ = libbpf.libbpf_set_print(root.dbg_printf);
 

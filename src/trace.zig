@@ -39,9 +39,7 @@ pub fn main() !void {
     defer process.argsFree(allocator, args);
     var arg_idx: usize = 1; // skip exe name
 
-    const obj_bytes = @embedFile("@bpf_prog");
-    const bytes = try allocator.dupe(u8, obj_bytes);
-    defer allocator.free(bytes);
+    const bytes = @embedFile("@bpf_prog");
 
     var seconds: ?usize = null;
     while (nextArg(args, &arg_idx)) |arg| {

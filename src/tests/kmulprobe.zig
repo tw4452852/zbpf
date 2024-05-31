@@ -9,9 +9,7 @@ const REGS = @import("bpf").Args.REGS;
 test "kmulprobe" {
     if (!root.btf_name_exist("bpf_kprobe_multi_link")) return error.SkipZigTest;
 
-    const obj_bytes = @embedFile("@kmulprobe");
-    const bytes = try allocator.dupe(u8, obj_bytes);
-    defer allocator.free(bytes);
+    const bytes = @embedFile("@kmulprobe");
 
     _ = libbpf.libbpf_set_print(root.dbg_printf);
 

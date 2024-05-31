@@ -10,9 +10,7 @@ const c = @cImport({
 });
 
 test "xdp_ping" {
-    const obj_bytes = @embedFile("@xdp_ping");
-    const bytes = try allocator.dupe(u8, obj_bytes);
-    defer allocator.free(bytes);
+    const bytes = @embedFile("@xdp_ping");
 
     _ = libbpf.libbpf_set_print(root.dbg_printf);
 
