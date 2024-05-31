@@ -31,7 +31,7 @@ pub fn open_tracebuf_pipe(clean: bool) !std.fs.File {
 
     // clean trace buffer if request
     if (clean) {
-        try cwd.writeFile2(.{
+        try cwd.writeFile(.{
             .sub_path = tracefs_mount_dir ++ "/trace",
             .data = "\n",
             .flags = .{},

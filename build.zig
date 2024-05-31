@@ -7,9 +7,7 @@ fn create_bpf_prog(ctx: *const Ctx, src_path: []const u8) *std.Build.Step.Compil
 
     const prog = ctx.b.addObject(.{
         .name = name,
-        .root_source_file = .{
-            .path = src_path,
-        },
+        .root_source_file = ctx.b.path(src_path),
         .target = ctx.b.resolveTargetQuery(.{
             .cpu_arch = switch (ctx.target.result.cpu.arch.endian()) {
                 .big => .bpfeb,
@@ -43,7 +41,7 @@ fn create_vmlinux(b: *std.Build) *std.Build.Module {
     const libbpf = create_libbpf(b, target, optimize);
     const exe = b.addExecutable(.{
         .name = "vmlinux_dumper",
-        .root_source_file = .{ .path = "src/vmlinux_dumper/main.zig" },
+        .root_source_file = b.path("src/vmlinux_dumper/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -57,18 +55,18 @@ fn create_vmlinux(b: *std.Build) *std.Build.Module {
     const stdout = run_exe.captureStdOut();
     const vmlinux_h = b.addInstallFile(stdout, "vmlinux.h");
     const zigify = b.addTranslateC(.{
-        .root_source_file = .{ .path = b.getInstallPath(vmlinux_h.dir, vmlinux_h.dest_rel_path) },
+        .root_source_file = .{.cwd_relative = b.getInstallPath(vmlinux_h.dir, vmlinux_h.dest_rel_path)},
         .target = target,
         .optimize = optimize,
     });
     zigify.addIncludeDir("src/vmlinux_dumper");
     zigify.step.dependOn(&vmlinux_h.step);
-    return b.addModule("vmlinux", .{ .root_source_file = .{ .generated = &zigify.output_file } });
+    return b.addModule("vmlinux", .{ .root_source_file = .{ .generated = .{ .file = &zigify.output_file } } });
 }
 
 fn create_bpf(b: *std.Build, vmlinux: *std.Build.Module) *std.Build.Module {
     return b.addModule("bpf", .{
-        .root_source_file = .{ .path = "src/bpf/root.zig" },
+        .root_source_file = b.path("src/bpf/root.zig"),
         .imports = &.{.{ .name = "vmlinux", .module = vmlinux }},
     });
 }
@@ -128,7 +126,7 @@ fn create_target_step(ctx: *const Ctx, main_path: []const u8, prog_path: []const
 
     const exe = ctx.b.addExecutable(.{
         .name = if (exe_name) |name| name else "zbpf",
-        .root_source_file = .{ .path = main_path },
+        .root_source_file = ctx.b.path(main_path),
         .target = ctx.target,
         .optimize = ctx.optimize,
     });
@@ -159,7 +157,7 @@ fn create_test_step(ctx: *const Ctx) !void {
     const filter = ctx.b.option([]const u8, "test", "test filter");
     // Creates a step for unit testing.
     const exe_tests = ctx.b.addTest(.{
-        .root_source_file = .{ .path = "src/tests/root.zig" },
+        .root_source_file = ctx.b.path("src/tests/root.zig"),
         .target = ctx.target,
         .optimize = ctx.optimize,
         .filter = filter,
@@ -195,12 +193,12 @@ fn create_test_step(ctx: *const Ctx) !void {
 fn create_docs_step(ctx: *const Ctx) !void {
     const exe = ctx.b.addObject(.{
         .name = "docs",
-        .root_source_file = .{ .path = "src/bpf/root.zig" },
+        .root_source_file = ctx.b.path("src/bpf/root.zig"),
         .target = ctx.target,
         .optimize = ctx.optimize,
     });
 
-    const dumb_vmlinux = ctx.b.addModule("dumb_vmlinux", .{ .root_source_file = .{ .path = "src/docs/dummy_vmlinux.zig" } });
+    const dumb_vmlinux = ctx.b.addModule("dumb_vmlinux", .{ .root_source_file = ctx.b.path("src/docs/dummy_vmlinux.zig") });
     const bpf = create_bpf(ctx.b, dumb_vmlinux);
     exe.root_module.addImport("bpf", bpf);
 
