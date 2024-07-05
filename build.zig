@@ -2,7 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const fs = std.fs;
 
-fn create_bpf_prog(ctx: *const Ctx, src_path: []const u8) *std.Build.Step.Compile {
+fn create_bpf_prog(ctx: *const Ctx, src_path: []const u8) std.Build.LazyPath {
     const name = fs.path.stem(src_path);
 
     const prog = ctx.b.addObject(.{
@@ -22,23 +22,19 @@ fn create_bpf_prog(ctx: *const Ctx, src_path: []const u8) *std.Build.Step.Compil
     prog.root_module.addImport("build_options", ctx.bpf);
     prog.root_module.addOptions("build_options", ctx.build_options);
 
-    return prog;
+    const run_btf_sanitizer = ctx.b.addRunArtifact(ctx.btf_sanitizer);
+    run_btf_sanitizer.addFileArg(prog.getEmittedBin());
+    return run_btf_sanitizer.addOutputFileArg(ctx.b.fmt("{s}_sanitized.o", .{name}));
 }
 
 fn create_libbpf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
     return b.dependency("libbpf", .{
         .target = target,
         .optimize = optimize,
-        .zig_wa = true,
     }).artifact("bpf");
 }
 
-fn create_vmlinux(b: *std.Build) *std.Build.Module {
-    // build for native
-    const target = b.host;
-    const optimize: std.builtin.OptimizeMode = .ReleaseFast;
-
-    const libbpf = create_libbpf(b, target, optimize);
+fn create_vmlinux(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, libbpf: *std.Build.Step.Compile) *std.Build.Module {
     const exe = b.addExecutable(.{
         .name = "vmlinux_dumper",
         .root_source_file = b.path("src/vmlinux_dumper/main.zig"),
@@ -64,6 +60,38 @@ fn create_vmlinux(b: *std.Build) *std.Build.Module {
     return b.addModule("vmlinux", .{ .root_source_file = .{ .generated = .{ .file = &zigify.output_file } } });
 }
 
+fn create_btf_sanitizer(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, libbpf: *std.Build.Step.Compile) *std.Build.Step.Compile {
+    const exe = b.addExecutable(.{
+        .name = "btf_sanitizer",
+        .root_source_file = b.path("src/btf_sanitizer/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const libelf = b.dependency("libelf", .{
+        .target = target,
+        .optimize = optimize,
+    }).artifact("elf");
+    exe.linkLibrary(libelf);
+    exe.linkLibrary(libbpf);
+    exe.linkLibC();
+    b.installArtifact(exe);
+
+    return exe;
+}
+
+fn create_native_tools(b: *std.Build) struct { *std.Build.Module, *std.Build.Step.Compile } {
+    // build for native
+    const target = b.host;
+    const optimize: std.builtin.OptimizeMode = .ReleaseFast;
+
+    const libbpf = create_libbpf(b, target, optimize);
+
+    return .{
+        create_vmlinux(b, target, optimize, libbpf),
+        create_btf_sanitizer(b, target, optimize, libbpf),
+    };
+}
+
 fn create_bpf(b: *std.Build, vmlinux: *std.Build.Module) *std.Build.Module {
     return b.addModule("bpf", .{
         .root_source_file = b.path("src/bpf/root.zig"),
@@ -79,6 +107,7 @@ const Ctx = struct {
     bpf: *std.Build.Module,
     libbpf_step: *std.Build.Step.Compile,
     build_options: *std.Build.Step.Options,
+    btf_sanitizer: *std.Build.Step.Compile,
 };
 
 pub fn build(b: *std.Build) !void {
@@ -88,7 +117,7 @@ pub fn build(b: *std.Build) !void {
 
     const libbpf = create_libbpf(b, target, optimize);
 
-    const vmlinux = create_vmlinux(b);
+    const vmlinux, const btf_sanitizer = create_native_tools(b);
 
     const bpf = create_bpf(b, vmlinux);
 
@@ -108,6 +137,7 @@ pub fn build(b: *std.Build) !void {
         .libbpf_step = libbpf,
         .build_options = build_options,
         .vmlinux = vmlinux,
+        .btf_sanitizer = btf_sanitizer,
     };
 
     // default bpf program
@@ -132,7 +162,7 @@ fn create_target_step(ctx: *const Ctx, main_path: []const u8, prog_path: []const
         .optimize = ctx.optimize,
     });
     exe.root_module.addAnonymousImport("@bpf_prog", .{
-        .root_source_file = prog.getEmittedBin(),
+        .root_source_file = prog,
     });
     exe.root_module.addImport("bpf", ctx.bpf);
     exe.root_module.addImport("vmlinux", ctx.vmlinux);
@@ -180,7 +210,7 @@ fn create_test_step(ctx: *const Ctx) !void {
         }
         const bpf_prog = create_bpf_prog(ctx, try fs.path.join(ctx.b.allocator, &[_][]const u8{ "samples", entry.name }));
         exe_tests.root_module.addAnonymousImport(try std.fmt.allocPrint(ctx.b.allocator, "@{s}", .{fs.path.stem(entry.name)}), .{
-            .root_source_file = bpf_prog.getEmittedBin(),
+            .root_source_file = bpf_prog,
         });
     }
 
