@@ -1,9 +1,19 @@
 const std = @import("std");
-const print = std.debug.print;
-pub const libbpf = @cImport({
+const libbpf = @cImport({
     @cInclude("stdio.h");
     @cInclude("btf.h");
 });
+const build_options = @import("build_options");
+
+fn print(comptime fmt: []const u8, args: anytype) void {
+    std.debug.print("vmlinux_dumper:" ++ fmt, args);
+}
+
+fn dbg_print(comptime fmt: []const u8, args: anytype) void {
+    if (build_options.debug) {
+        print(fmt, args);
+    }
+}
 
 fn btf_dump_printf(ctx: ?*anyopaque, fmt: [*c]const u8, args: @typeInfo(@typeInfo(@typeInfo(libbpf.btf_dump_printf_fn_t).Optional.child).Pointer.child).Fn.params[2].type.?) callconv(.C) void {
     const fd = @intFromPtr(ctx);
@@ -36,6 +46,7 @@ pub fn main() !void {
     }
     const output = try std.fs.createFileAbsolute(output_arg.?, .{});
     defer output.close();
+    if (build_options.debug) print("vmlinux_dumper: dump vmlinux.h to {s}\n", .{output_arg.?});
 
     const d = libbpf.btf_dump__new(btf, btf_dump_printf, @ptrFromInt(@as(usize, @intCast(output.handle))), null);
     if (d == null) {

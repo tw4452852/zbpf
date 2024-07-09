@@ -19,12 +19,15 @@ fn create_bpf_prog(ctx: *const Ctx, src_path: []const u8) std.Build.LazyPath {
     });
     prog.root_module.strip = false;
     prog.root_module.addImport("bpf", ctx.bpf);
-    prog.root_module.addImport("build_options", ctx.bpf);
+    prog.root_module.addImport("vmlinux", ctx.vmlinux);
     prog.root_module.addOptions("build_options", ctx.build_options);
 
     const run_btf_sanitizer = ctx.b.addRunArtifact(ctx.btf_sanitizer);
     run_btf_sanitizer.addFileArg(prog.getEmittedBin());
-    return run_btf_sanitizer.addOutputFileArg(ctx.b.fmt("{s}_sanitized.o", .{name}));
+    if (ctx.vmlinux_bin_path) |vmlinux| {
+        run_btf_sanitizer.addPrefixedFileArg("-vmlinux", .{ .cwd_relative = vmlinux });
+    }
+    return run_btf_sanitizer.addPrefixedOutputFileArg("-o", ctx.b.fmt("{s}_sanitized.o", .{name}));
 }
 
 fn create_libbpf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
@@ -34,7 +37,7 @@ fn create_libbpf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.
     }).artifact("bpf");
 }
 
-fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?[]const u8) *std.Build.Module {
+fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?[]const u8, build_options: *std.Build.Step.Options) *std.Build.Module {
     // build for native
     const target = b.host;
     const optimize: std.builtin.OptimizeMode = .ReleaseFast;
@@ -47,6 +50,7 @@ fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?
     });
     exe.linkLibrary(libbpf);
     exe.linkLibC();
+    exe.root_module.addOptions("build_options", build_options);
     b.installArtifact(exe);
 
     const run_exe = b.addRunArtifact(exe);
@@ -62,7 +66,11 @@ fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?
     return b.addModule("vmlinux", .{ .root_source_file = zigify.getOutput() });
 }
 
-fn create_btf_sanitizer(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, libbpf: *std.Build.Step.Compile) *std.Build.Step.Compile {
+fn create_btf_sanitizer(b: *std.Build, libbpf: *std.Build.Step.Compile, build_options: *std.Build.Step.Options) *std.Build.Step.Compile {
+    // build for native
+    const target = b.host;
+    const optimize: std.builtin.OptimizeMode = .ReleaseFast;
+
     const exe = b.addExecutable(.{
         .name = "btf_sanitizer",
         .root_source_file = b.path("src/btf_sanitizer/main.zig"),
@@ -76,12 +84,14 @@ fn create_btf_sanitizer(b: *std.Build, target: std.Build.ResolvedTarget, optimiz
     exe.linkLibrary(libelf);
     exe.linkLibrary(libbpf);
     exe.linkLibC();
+    exe.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/btf_sanitizer/" } });
+    exe.root_module.addOptions("build_options", build_options);
     b.installArtifact(exe);
 
     return exe;
 }
 
-fn create_native_tools(b: *std.Build) struct { *std.Build.Module, *std.Build.Step.Compile } {
+fn create_native_tools(b: *std.Build, vmlinux_bin: ?[]const u8, build_options: *std.Build.Step.Options) struct { *std.Build.Module, *std.Build.Step.Compile } {
     // build for native
     const target = b.host;
     const optimize: std.builtin.OptimizeMode = .ReleaseFast;
@@ -89,8 +99,8 @@ fn create_native_tools(b: *std.Build) struct { *std.Build.Module, *std.Build.Ste
     const libbpf = create_libbpf(b, target, optimize);
 
     return .{
-        create_vmlinux(b, target, optimize, libbpf),
-        create_btf_sanitizer(b, target, optimize, libbpf),
+        create_vmlinux(b, libbpf, vmlinux_bin, build_options),
+        create_btf_sanitizer(b, libbpf, build_options),
     };
 }
 
@@ -110,6 +120,7 @@ const Ctx = struct {
     libbpf_step: *std.Build.Step.Compile,
     build_options: *std.Build.Step.Options,
     btf_sanitizer: *std.Build.Step.Compile,
+    vmlinux_bin_path: ?[]const u8,
 };
 
 pub fn build(b: *std.Build) !void {
@@ -117,19 +128,18 @@ pub fn build(b: *std.Build) !void {
     // WA for pointer alignment assumption of libbpf
     const optimize: std.builtin.OptimizeMode = .ReleaseFast;
 
-    const libbpf = create_libbpf(b, target, optimize);
-
-    const vmlinux, const btf_sanitizer = create_native_tools(b);
-
-    const bpf = create_bpf(b, vmlinux);
-
     const build_options = b.addOptions();
+    const vmlinux_bin = b.option([]const u8, "vmlinux", "vmlinux binary used for BTF generation");
     const debugging = if (b.option(bool, "debug", "enable debugging log")) |v| v else false;
     const kprobes = if (b.option([]const []const u8, "kprobe", "the traced kernel function name")) |v| v else &.{};
     const syscalls = if (b.option([]const []const u8, "syscall", "the traced syscall name")) |v| v else &.{};
     build_options.addOption(@TypeOf(debugging), "debug", debugging);
     build_options.addOption(@TypeOf(kprobes), "kprobes", kprobes);
     build_options.addOption(@TypeOf(syscalls), "syscalls", syscalls);
+
+    const libbpf = create_libbpf(b, target, optimize);
+    const vmlinux, const btf_sanitizer = create_native_tools(b, vmlinux_bin, build_options);
+    const bpf = create_bpf(b, vmlinux);
 
     const ctx = Ctx{
         .b = b,
@@ -140,6 +150,7 @@ pub fn build(b: *std.Build) !void {
         .build_options = build_options,
         .vmlinux = vmlinux,
         .btf_sanitizer = btf_sanitizer,
+        .vmlinux_bin_path = vmlinux_bin,
     };
 
     // default bpf program
@@ -177,8 +188,7 @@ fn create_target_step(ctx: *const Ctx, main_path: []const u8, prog_path: []const
     // otherwise, create a step for it
     if (exe_name) |name| {
         const install_exe = ctx.b.addInstallArtifact(exe, .{});
-        var buf: [64]u8 = undefined;
-        const description = try std.fmt.bufPrint(&buf, "Build {s}", .{name});
+        const description = ctx.b.fmt("Build {s}", .{name});
         const build_step = ctx.b.step(name, description);
         build_step.dependOn(&install_exe.step);
     } else {

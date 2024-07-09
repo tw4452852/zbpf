@@ -4,8 +4,8 @@
     .paths = .{""},
     .dependencies = .{
         .libbpf = .{
-            .url = "https://github.com/tw4452852/libbpf_zig/archive/refs/tags/1.4.3.tar.gz",
-            .hash = "122031480a455719e43c8167376feb2aff9b4c4d867fc70a84200ff0da095d076631",
+            .url = "https://github.com/tw4452852/libbpf_zig/archive/15b39378e968d27d787c94ddb01d1673f67cf141.tar.gz",
+            .hash = "1220b350b35773867b888dc7563e831ccc563df366a2e7f0a7d9b04001bf42cbfbb0",
         },
         .libelf = .{
             .url = "https://github.com/tw4452852/elfutils/archive/refs/tags/0.190.0-4.tar.gz",

@@ -108,5 +108,6 @@ fentry | [source](samples/fentry.zig) | [source](src/tests/fentry.zig)
 kprobe | [source](samples/kprobe.zig) | [source](src/tests/kprobe.zig)
 kmulprobe | [source](samples/kmulprobe.zig) | [source](src/tests/kmulprobe.zig)
 xdp ping | [source](samples/xdp_ping.zig) | [source](src/tests/xdp_ping.zig)
+kfunc | [source](samples/kfunc.zig) | [source](src/tests/kfunc.zig)
 
 **Have fun!**
