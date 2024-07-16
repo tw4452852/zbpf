@@ -13,6 +13,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: mlugg/setup-zig@v1
+        with:
+          version: master
       - run: uname -a
       - run: zig build
       - run: zig build docs
@@ -24,4 +26,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: mlugg/setup-zig@v1
+        with:
+          version: master
       - run: zig fmt --check build.zig.zon build.zig src/bpf/*.zig src/tests/*.zig samples/*.zig src/vmlinux_dumper/*.zig src/*.zig src/docs/*.zig
