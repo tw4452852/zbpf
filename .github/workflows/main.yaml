@@ -12,7 +12,7 @@ jobs:
     runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v3
-      - uses: goto-bus-stop/setup-zig@v2
+      - uses: mlugg/setup-zig@v1
       - run: uname -a
       - run: zig build
       - run: zig build docs
@@ -23,5 +23,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: goto-bus-stop/setup-zig@v2
+      - uses: mlugg/setup-zig@v1
       - run: zig fmt --check build.zig.zon build.zig src/bpf/*.zig src/tests/*.zig samples/*.zig src/vmlinux_dumper/*.zig src/*.zig src/docs/*.zig
