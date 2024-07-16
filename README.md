@@ -79,8 +79,8 @@ This is very helpful when debugging linux kernel.
 For more details, you could check the implementation: [BPF side](https://github.com/tw4452852/zbpf/blob/main/src/trace.bpf.zig)
 and [Host side](https://github.com/tw4452852/zbpf/blob/main/src/trace.zig).
 
-You could specify the kernel functions you want to trace with: `zbpf build trace -Dkprobe=<kernel_function_name> -Dkprobe=...`
-And for system calls: `zbpf build trace -Dsyscall=<syscall_name> -Dsyscall=...`.
+You could specify the kernel functions you want to trace with: `zig build trace -Dkprobe=<kernel_function_name> -Dkprobe=...`
+And for system calls: `zig build trace -Dsyscall=<syscall_name> -Dsyscall=...`.
 You could even mix them.
 
 And here's a quick demo:
