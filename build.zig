@@ -34,7 +34,11 @@ fn create_libbpf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.
     }).artifact("bpf");
 }
 
-fn create_vmlinux(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, libbpf: *std.Build.Step.Compile) *std.Build.Module {
+fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?[]const u8) *std.Build.Module {
+    // build for native
+    const target = b.host;
+    const optimize: std.builtin.OptimizeMode = .ReleaseFast;
+
     const exe = b.addExecutable(.{
         .name = "vmlinux_dumper",
         .root_source_file = b.path("src/vmlinux_dumper/main.zig"),
@@ -46,18 +50,16 @@ fn create_vmlinux(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std
     b.installArtifact(exe);
 
     const run_exe = b.addRunArtifact(exe);
-    const vmlinux_bin = b.option([]const u8, "vmlinux", "vmlinux binary used for BTF generation");
-    if (vmlinux_bin) |vmlinux| run_exe.addArg(vmlinux);
-    const stdout = run_exe.captureStdOut();
-    const vmlinux_h = b.addInstallFile(stdout, "vmlinux.h");
+
+    if (vmlinux_bin) |vmlinux| run_exe.addPrefixedFileArg("-vmlinux", .{ .cwd_relative = vmlinux });
+    const vmlinux_h = run_exe.addPrefixedOutputFileArg("-o", b.fmt("vmlinux.h", .{}));
     const zigify = b.addTranslateC(.{
-        .root_source_file = .{ .cwd_relative = b.getInstallPath(vmlinux_h.dir, vmlinux_h.dest_rel_path) },
+        .root_source_file = vmlinux_h,
         .target = target,
         .optimize = optimize,
     });
     zigify.addIncludeDir("src/vmlinux_dumper");
-    zigify.step.dependOn(&vmlinux_h.step);
-    return b.addModule("vmlinux", .{ .root_source_file = .{ .generated = .{ .file = &zigify.output_file } } });
+    return b.addModule("vmlinux", .{ .root_source_file = zigify.getOutput() });
 }
 
 fn create_btf_sanitizer(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, libbpf: *std.Build.Step.Compile) *std.Build.Step.Compile {

@@ -10,7 +10,7 @@ fn btf_dump_printf(ctx: ?*anyopaque, fmt: [*c]const u8, args: @typeInfo(@typeInf
     _ = libbpf.vdprintf(@intCast(fd), fmt, args);
 }
 
-// vmlinux_dumper [path_to_vmlinux]
+// vmlinux_dumper [-vmlinux/path/to/vmlinux] -o/path/to/output
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -19,15 +19,25 @@ pub fn main() !void {
 
     var it = std.process.args();
     _ = it.skip(); // skip process name
-    const btf = if (it.next()) |vmlinux| libbpf.btf__parse(vmlinux, null) else libbpf.btf__load_vmlinux_btf();
+    var vmlinux_arg: ?[:0]const u8 = null;
+    var output_arg: ?[:0]const u8 = null;
+    while (it.next()) |arg| {
+        if (std.mem.startsWith(u8, arg, "-o")) {
+            output_arg = arg[2..];
+        } else if (std.mem.startsWith(u8, arg, "-vmlinux")) {
+            vmlinux_arg = arg[8..];
+        }
+    }
+
+    const btf = if (vmlinux_arg) |vmlinux| libbpf.btf__parse(vmlinux, null) else libbpf.btf__load_vmlinux_btf();
     if (btf == null) {
         print("failed to get BTF: {}\n", .{std.posix.errno(-1)});
         return error.PARSE;
     }
+    const output = try std.fs.createFileAbsolute(output_arg.?, .{});
+    defer output.close();
 
-    const stdout = std.io.getStdOut();
-
-    const d = libbpf.btf_dump__new(btf, btf_dump_printf, @ptrFromInt(@as(usize, @intCast(stdout.handle))), null);
+    const d = libbpf.btf_dump__new(btf, btf_dump_printf, @ptrFromInt(@as(usize, @intCast(output.handle))), null);
     if (d == null) {
         print("failed to create btf dumper: {}\n", .{std.posix.errno(-1)});
         return error.DUMP;
@@ -69,11 +79,11 @@ pub fn main() !void {
                 print("failed to dump {}th btf type: {} for function {s}\n", .{ i, std.posix.errno(-1), func_name });
                 return error.DUMP;
             }
-            try std.fmt.format(stdout, ";\n", .{});
+            try std.fmt.format(output, ";\n", .{});
 
             try funcs.put(try allocator.dupe(u8, func_name), {});
         }
     }
 
-    try std.fmt.format(stdout, "#include <syscalls.h>\n", .{});
+    try std.fmt.format(output, "#include <syscalls.h>\n", .{});
 }
