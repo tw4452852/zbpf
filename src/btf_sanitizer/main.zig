@@ -195,15 +195,17 @@ pub fn main() !void {
 
     // deduplication and finalize BTF
     // NOTE: redefine due to the original one has bitfields
-    const OPT = extern struct {
-        sz: usize = @sizeOf(@This()),
-        btf_ext: ?*c.btf_ext = null,
-        force_collisions: bool = false,
-    };
-    ret = c.btf__dedup(dst_btf, @ptrCast(&OPT{}));
-    if (ret != 0) {
-        print("failed to dedup BTF: {}\n", .{std.posix.errno(-1)});
-        return error.INTERNAL;
+    if (false) {
+        const OPT = extern struct {
+            sz: usize = @sizeOf(@This()),
+            btf_ext: ?*c.btf_ext = null,
+            force_collisions: bool = false,
+        };
+        ret = c.btf__dedup(dst_btf, @ptrCast(&OPT{}));
+        if (ret != 0) {
+            print("failed to dedup BTF: {}\n", .{std.posix.errno(-1)});
+            return error.INTERNAL;
+        }
     }
     buf = c.btf__raw_data(dst_btf, &sz);
 
