@@ -42,6 +42,6 @@ test "exit" {
         const r = f.reader();
         const l = try r.readUntilDelimiterAlloc(allocator, '\n', std.math.maxInt(u32));
         defer allocator.free(l);
-        try testing.expectStringEndsWith(l, "trace_printk: error occur at samples/exit.zig:5 return 1");
+        try testing.expectStringEndsWith(l, "trace_printk: error occur at exit.zig:5 return 1");
     }
 }
