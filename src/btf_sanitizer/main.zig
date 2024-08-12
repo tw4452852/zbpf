@@ -90,6 +90,7 @@ pub fn main() !void {
     // sanitize
     _ = c.btf__find_str(dst_btf, ""); // ensure btf is in modifiable/splited state
     var externs_with_btf = std.StringHashMap(u32).init(allocator); // record external symbols which have BTF already
+    var found_kconfig_sec = false;
     defer externs_with_btf.deinit();
     // fix existing BTF
     for (0..c.btf__type_cnt(dst_btf)) |i| {
@@ -123,6 +124,11 @@ pub fn main() !void {
         } else if (c.btf_is_var(t) and c.btf_var(t)[0].linkage == c.BTF_VAR_GLOBAL_EXTERN and t.name_off > 0) {
             const s = c.btf__str_by_offset(dst_btf, t.name_off);
             try externs_with_btf.put(std.mem.sliceTo(s, 0), @intCast(i));
+        } else if (c.btf_is_datasec(t) and t.name_off > 0) {
+            const name: [:0]u8 = @constCast(std.mem.sliceTo(c.btf__name_by_offset(dst_btf, t.name_off), 0));
+            if (std.mem.eql(u8, name, ".kconfig")) {
+                found_kconfig_sec = true;
+            }
         }
     }
 
@@ -177,7 +183,7 @@ pub fn main() !void {
         }
     }
     // Add .kconfig section
-    if (externs_with_btf.count() > 0) {
+    if (externs_with_btf.count() > 0 and !found_kconfig_sec) {
         const sec_id = c.btf__add_datasec(dst_btf, ".kconfig", 0);
         if (sec_id < 0) {
             print("failed to create .kconfig BTF section: {}\n", .{std.posix.errno(-1)});
@@ -185,7 +191,7 @@ pub fn main() !void {
         }
         var val_it = externs_with_btf.valueIterator();
         while (val_it.next()) |id| {
-            ret = c.btf__add_datasec_var_info(dst_btf, @intCast(id.*), 0, @intCast(c.btf__resolve_size(src_btf, id.*)));
+            ret = c.btf__add_datasec_var_info(dst_btf, @intCast(id.*), 0, @intCast(c.btf__resolve_size(dst_btf, id.*)));
             if (ret != 0) {
                 print("failed to add to .kconfig BTF section: {}\n", .{std.posix.errno(-1)});
                 return error.INTERNAL;
