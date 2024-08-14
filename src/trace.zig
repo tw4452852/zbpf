@@ -153,42 +153,92 @@ fn on_sample(_ctx: ?*anyopaque, data: ?*anyopaque, _: usize) callconv(.C) c_int 
             const args: *T = @ptrCast(&record.regs);
             const pid: u32 = @truncate(record.tpid);
 
-            ctx.stdout.print("pid: {}, {s} {s}: ", .{ pid, if (for_kprobe) "kprobe" else "syscall", func_name }) catch return -1;
-            if (comptime @hasDecl(T, "arg0")) {
+            ctx.stdout.print("pid: {}, {s} {s} {s}:\n", .{ pid, if (for_kprobe) "kprobe" else "syscall", func_name, if (record.entry) "enter" else "exit" }) catch return -1;
+            if (record.entry and comptime @hasDecl(T, "arg0")) {
                 const v = args.arg0();
 
-                ctx.stdout.print("arg0: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
+                ctx.stdout.print("arg0: {}\n", .{genFmt(v, @intFromPtr(record) + record.extra_offset, 0)}) catch return -1;
             }
-            if (comptime @hasDecl(T, "arg1")) {
+            if (record.entry and comptime @hasDecl(T, "arg1")) {
                 const v = args.arg1();
-
-                ctx.stdout.print(", arg1: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
+                ctx.stdout.print("arg1: {}\n", .{genFmt(v, @intFromPtr(record) + record.extra_offset, 0)}) catch return -1;
             }
-            if (comptime @hasDecl(T, "arg2")) {
+            if (record.entry and comptime @hasDecl(T, "arg2")) {
                 const v = args.arg2();
 
-                ctx.stdout.print(", arg2: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
+                ctx.stdout.print("arg2: {}\n", .{genFmt(v, @intFromPtr(record) + record.extra_offset, 0)}) catch return -1;
             }
-            if (comptime @hasDecl(T, "arg3")) {
+            if (record.entry and comptime @hasDecl(T, "arg3")) {
                 const v = args.arg3();
 
-                ctx.stdout.print(", arg3: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
+                ctx.stdout.print("arg3: {}\n", .{genFmt(v, @intFromPtr(record) + record.extra_offset, 0)}) catch return -1;
             }
-            if (comptime @hasDecl(T, "arg4")) {
+            if (record.entry and comptime @hasDecl(T, "arg4")) {
                 const v = args.arg4();
 
-                ctx.stdout.print("arg4: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
+                ctx.stdout.print("arg4: {}\n", .{genFmt(v, @intFromPtr(record) + record.extra_offset, 0)}) catch return -1;
             }
-            if (comptime @hasDecl(T, "ret")) {
+            if (!record.entry and comptime @hasDecl(T, "ret")) {
                 const v = args.ret();
 
-                ctx.stdout.print(", ret: " ++ (if (is_pointer(@TypeOf(v))) "{any}" else "{}"), .{v}) catch return -1;
+                ctx.stdout.print("ret: {}\n", .{genFmt(v, @intFromPtr(record) + record.extra_offset, 0)}) catch return -1;
             }
-            ctx.stdout.print("\n", .{}) catch return -1;
         },
 
         else => ctx.stdout.print("Unknown function id: {}\n", .{record.id}) catch return -1,
     }
 
     return 0;
+}
+
+fn genFmt(v: anytype, base: usize, level: usize) struct {
+    const T = @TypeOf(v);
+    base: usize,
+    ctx: T,
+    level: usize,
+
+    pub fn format(
+        self: @This(),
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        if (self.level > 4) {
+            return writer.writeAll("...");
+        }
+
+        switch (@typeInfo(T)) {
+            .Pointer => {
+                if (@intFromPtr(self.ctx) < 4096) {
+                    const p: T = @ptrFromInt(@intFromPtr(self.ctx) + self.base);
+                    if (T == [*c]const u8) {
+                        return std.fmt.format(writer, "{s}", .{p});
+                    } else {
+                        return std.fmt.format(writer, "*{}", .{genFmt(p.*, self.base, self.level + 1)});
+                    }
+                } else {
+                    return std.fmt.format(writer, "{*}", .{self.ctx});
+                }
+            },
+            .Struct => |info| {
+                try writer.writeAll(@typeName(T));
+                try writer.writeAll("{");
+                inline for (info.fields, 0..) |f, i| {
+                    if (i == 0) {
+                        try writer.writeAll(" .");
+                    } else {
+                        try writer.writeAll(", .");
+                    }
+                    try writer.writeAll(f.name);
+                    try writer.writeAll(" = ");
+                    try std.fmt.format(writer, "{}", .{genFmt(@field(self.ctx, f.name), self.base, self.level + 1)});
+                }
+                return writer.writeAll(" }");
+            },
+            else => {},
+        }
+        return std.fmt.format(writer, "{any}", .{self.ctx});
+    }
+} {
+    return .{ .ctx = v, .base = base, .level = level };
 }

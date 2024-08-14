@@ -85,7 +85,7 @@ You could even mix them.
 
 And here's a quick demo:
 
-[![asciicast](https://asciinema.org/a/620205.svg)](https://asciinema.org/a/620205)
+[![asciicast](https://asciinema.org/a/672074.svg)](https://asciinema.org/a/672074)
 
 ## Samples
 

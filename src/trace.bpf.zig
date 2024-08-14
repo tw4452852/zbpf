@@ -4,12 +4,10 @@ const BPF = std.os.linux.BPF;
 const helpers = BPF.kern.helpers;
 const REGS = bpf.Args.REGS;
 const TRACE_RECORD = bpf.Args.TRACE_RECORD;
-const trace_printk = helpers.trace_printk;
 
 const kprobes = @import("build_options").kprobes;
 const syscalls = @import("build_options").syscalls;
 
-var buffer = bpf.Map.HashMap("buffer", u64, REGS, 0xffff, 0).init();
 var events = bpf.Map.RingBuffer("events", 16, 0).init();
 
 fn generate_kprobe(comptime name: []const u8, comptime id: u32) type {
@@ -18,7 +16,20 @@ fn generate_kprobe(comptime name: []const u8, comptime id: u32) type {
 
         fn kprobe_entry(regs: *REGS) linksection(tracked_func.entry_section()) callconv(.C) c_long {
             const tpid = helpers.get_current_pid_tgid();
-            buffer.update(.any, tpid, regs.*);
+            const resv = events.reserve(extern struct {
+                record: TRACE_RECORD,
+                extra: [tracked_func.Ctx().extra_record_size()]u8 = undefined,
+            });
+            resv.data_ptr.* = .{
+                .record = .{
+                    .id = id,
+                    .tpid = tpid,
+                    .regs = tracked_func.Ctx().deep_copy_to_user(regs, @intFromPtr(&resv.data_ptr.extra), true),
+                    .extra_offset = @intFromPtr(&resv.data_ptr.extra) - @intFromPtr(resv.data_ptr),
+                    .entry = true,
+                },
+            };
+            resv.commit();
 
             return 0;
         }
@@ -29,21 +40,20 @@ fn generate_kprobe(comptime name: []const u8, comptime id: u32) type {
 
         fn kprobe_exit(regs: *REGS) linksection(tracked_func.exit_section()) callconv(.C) c_long {
             const tpid = helpers.get_current_pid_tgid();
-            if (buffer.lookup(tpid)) |v| {
-                const resv = events.reserve(TRACE_RECORD);
-                v.ret_ptr().* = regs.ret_ptr().*;
-                resv.data_ptr.* = .{
+            const resv = events.reserve(extern struct {
+                record: TRACE_RECORD,
+                extra: [tracked_func.Ctx().extra_record_size()]u8 = undefined,
+            });
+            resv.data_ptr.* = .{
+                .record = .{
                     .id = id,
                     .tpid = tpid,
-                    .regs = v.*,
-                };
-                resv.commit();
-            } else {
-                const fmt = "exit failed\n";
-                _ = trace_printk(fmt, fmt.len + 1, 0, 0, 0);
-                return 1;
-            }
-
+                    .regs = tracked_func.Ctx().deep_copy_to_user(regs, @intFromPtr(&resv.data_ptr.extra), false),
+                    .extra_offset = @intFromPtr(&resv.data_ptr.extra) - @intFromPtr(resv.data_ptr),
+                    .entry = false,
+                },
+            };
+            resv.commit();
             return 0;
         }
 
@@ -58,13 +68,27 @@ fn generate_syscall(comptime name: []const u8, comptime id: u32) type {
         const tracked_syscall = bpf.Ksyscall{ .name = name };
 
         fn syscall_entry(args: *tracked_syscall.Ctx()) linksection(tracked_syscall.entry_section()) callconv(.C) c_long {
-            const tpid = helpers.get_current_pid_tgid();
+            var regs: REGS = undefined;
+            const err = helpers.probe_read_kernel(&regs, @sizeOf(REGS), args.get_arg_ctx().get_regs());
+            if (err != 0) {
+                bpf.exit(@src(), err);
+            }
 
-            buffer.update(.any, tpid, std.mem.zeroes(REGS));
-            if (buffer.lookup(tpid)) |v| {
-                const err = helpers.probe_read_kernel(v, @sizeOf(REGS), args.get_arg_ctx().get_regs());
-                if (err != 0) return 1;
-            } else return 1;
+            const tpid = helpers.get_current_pid_tgid();
+            const resv = events.reserve(extern struct {
+                record: TRACE_RECORD,
+                extra: [tracked_syscall.Ctx().extra_record_size()]u8 = undefined,
+            });
+            resv.data_ptr.* = .{
+                .record = .{
+                    .id = id,
+                    .tpid = tpid,
+                    .regs = tracked_syscall.Ctx().deep_copy_to_user(&regs, @intFromPtr(&resv.data_ptr.extra), true),
+                    .extra_offset = @intFromPtr(&resv.data_ptr.extra) - @intFromPtr(resv.data_ptr),
+                    .entry = true,
+                },
+            };
+            resv.commit();
 
             return 0;
         }
@@ -74,23 +98,25 @@ fn generate_syscall(comptime name: []const u8, comptime id: u32) type {
         }
 
         fn syscall_exit(args: *tracked_syscall.Ctx()) linksection(tracked_syscall.exit_section()) callconv(.C) c_long {
+            var regs: REGS = undefined;
+            regs.ret_ptr().* = @bitCast(args.ret());
+
             const tpid = helpers.get_current_pid_tgid();
-            if (buffer.lookup(tpid)) |v| {
-                const ret = args.ret();
-                const resv = events.reserve(TRACE_RECORD);
-                v.ret_ptr().* = @bitCast(ret);
-                resv.data_ptr.* = .{
+            const resv = events.reserve(extern struct {
+                record: TRACE_RECORD,
+                extra: [tracked_syscall.Ctx().extra_record_size()]u8 = undefined,
+            });
+
+            resv.data_ptr.* = .{
+                .record = .{
                     .id = id,
                     .tpid = tpid,
-                    .regs = v.*,
-                };
-                resv.commit();
-            } else {
-                const fmt = "exit failed\n";
-                _ = trace_printk(fmt, fmt.len + 1, 0, 0, 0);
-                return 1;
-            }
-
+                    .regs = tracked_syscall.Ctx().deep_copy_to_user(&regs, @intFromPtr(&resv.data_ptr.extra), false),
+                    .extra_offset = @intFromPtr(&resv.data_ptr.extra) - @intFromPtr(resv.data_ptr),
+                    .entry = false,
+                },
+            };
+            resv.commit();
             return 0;
         }
 
