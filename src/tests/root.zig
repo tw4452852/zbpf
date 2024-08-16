@@ -64,4 +64,5 @@ test {
     _ = @import("ksyscall.zig");
     _ = @import("xdp_ping.zig");
     _ = @import("kfunc.zig");
+    _ = @import("stacktrace.zig");
 }

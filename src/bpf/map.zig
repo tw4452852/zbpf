@@ -275,3 +275,38 @@ pub fn RingBuffer(
         }
     };
 }
+
+pub const STACK_TRACE = [127]u64;
+
+/// Represent `BPF_MAP_TYPE_STACK_TRACE`.
+pub fn StackTraceMap(
+    comptime name: []const u8,
+    comptime max_entries: u32,
+) type {
+    return struct {
+        map: Map(name, .stack_trace, u32, STACK_TRACE, max_entries, 0),
+
+        const Self = @This();
+
+        /// Initialization.
+        pub fn init() Self {
+            return .{ .map = .{} };
+        }
+
+        /// Return the pointer to the entry at index.
+        /// If index out of range, return `null`.
+        /// If any error happens, current program will exit immediately.
+        pub fn lookup(self: *const Self, index: u32) ?*STACK_TRACE {
+            return self.map.lookup(index);
+        }
+
+        /// Get current stack, return the index
+        pub fn get_current_stack(self: *const Self, ctx: *anyopaque) u32 {
+            const rc = helpers.get_stackid(ctx, @ptrCast(&@TypeOf(self.map).def), 0);
+            if (rc < 0) {
+                exit(@src(), @as(c_long, rc));
+            }
+            return @intCast(rc);
+        }
+    };
+}
