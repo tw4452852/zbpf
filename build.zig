@@ -2,6 +2,8 @@ const std = @import("std");
 const builtin = @import("builtin");
 const fs = std.fs;
 
+var debugging = false;
+
 fn create_bpf_prog(ctx: *const Ctx, src_path: []const u8) std.Build.LazyPath {
     const name = fs.path.stem(src_path);
 
@@ -27,6 +29,7 @@ fn create_bpf_prog(ctx: *const Ctx, src_path: []const u8) std.Build.LazyPath {
     if (ctx.vmlinux_bin_path) |vmlinux| {
         run_btf_sanitizer.addPrefixedFileArg("-vmlinux", .{ .cwd_relative = vmlinux });
     }
+    if (debugging) run_btf_sanitizer.addArg("-debug");
     return run_btf_sanitizer.addPrefixedOutputFileArg("-o", ctx.b.fmt("{s}_sanitized.o", .{name}));
 }
 
@@ -37,7 +40,7 @@ fn create_libbpf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.
     }).artifact("bpf");
 }
 
-fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?[]const u8, build_options: *std.Build.Step.Options) *std.Build.Module {
+fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?[]const u8) *std.Build.Module {
     // build for native
     const target = b.host;
     const optimize: std.builtin.OptimizeMode = .ReleaseFast;
@@ -50,12 +53,12 @@ fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?
     });
     exe.linkLibrary(libbpf);
     exe.linkLibC();
-    exe.root_module.addOptions("build_options", build_options);
     b.installArtifact(exe);
 
     const run_exe = b.addRunArtifact(exe);
 
     if (vmlinux_bin) |vmlinux| run_exe.addPrefixedFileArg("-vmlinux", .{ .cwd_relative = vmlinux });
+    if (debugging) run_exe.addArg("-debug");
     const vmlinux_h = run_exe.addPrefixedOutputFileArg("-o", b.fmt("vmlinux.h", .{}));
     const zigify = b.addTranslateC(.{
         .root_source_file = vmlinux_h,
@@ -66,7 +69,7 @@ fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?
     return b.addModule("vmlinux", .{ .root_source_file = zigify.getOutput() });
 }
 
-fn create_btf_sanitizer(b: *std.Build, libbpf: *std.Build.Step.Compile, build_options: *std.Build.Step.Options) *std.Build.Step.Compile {
+fn create_btf_sanitizer(b: *std.Build, libbpf: *std.Build.Step.Compile) *std.Build.Step.Compile {
     // build for native
     const target = b.host;
     const optimize: std.builtin.OptimizeMode = .ReleaseFast;
@@ -85,13 +88,12 @@ fn create_btf_sanitizer(b: *std.Build, libbpf: *std.Build.Step.Compile, build_op
     exe.linkLibrary(libbpf);
     exe.linkLibC();
     exe.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/btf_sanitizer/" } });
-    exe.root_module.addOptions("build_options", build_options);
     b.installArtifact(exe);
 
     return exe;
 }
 
-fn create_native_tools(b: *std.Build, vmlinux_bin: ?[]const u8, build_options: *std.Build.Step.Options) struct { *std.Build.Module, *std.Build.Step.Compile } {
+fn create_native_tools(b: *std.Build, vmlinux_bin: ?[]const u8) struct { *std.Build.Module, *std.Build.Step.Compile } {
     // build for native
     const target = b.host;
     const optimize: std.builtin.OptimizeMode = .ReleaseFast;
@@ -99,8 +101,8 @@ fn create_native_tools(b: *std.Build, vmlinux_bin: ?[]const u8, build_options: *
     const libbpf = create_libbpf(b, target, optimize);
 
     return .{
-        create_vmlinux(b, libbpf, vmlinux_bin, build_options),
-        create_btf_sanitizer(b, libbpf, build_options),
+        create_vmlinux(b, libbpf, vmlinux_bin),
+        create_btf_sanitizer(b, libbpf),
     };
 }
 
@@ -130,7 +132,7 @@ pub fn build(b: *std.Build) !void {
 
     const build_options = b.addOptions();
     const vmlinux_bin = b.option([]const u8, "vmlinux", "vmlinux binary used for BTF generation");
-    const debugging = if (b.option(bool, "debug", "enable debugging log")) |v| v else false;
+    debugging = if (b.option(bool, "debug", "enable debugging log")) |v| v else false;
     const kprobes = if (b.option([]const []const u8, "kprobe", "the traced kernel function name")) |v| v else &.{};
     const syscalls = if (b.option([]const []const u8, "syscall", "the traced syscall name")) |v| v else &.{};
     build_options.addOption(@TypeOf(debugging), "debug", debugging);
@@ -138,7 +140,7 @@ pub fn build(b: *std.Build) !void {
     build_options.addOption(@TypeOf(syscalls), "syscalls", syscalls);
 
     const libbpf = create_libbpf(b, target, optimize);
-    const vmlinux, const btf_sanitizer = create_native_tools(b, vmlinux_bin, build_options);
+    const vmlinux, const btf_sanitizer = create_native_tools(b, vmlinux_bin);
     const bpf = create_bpf(b, vmlinux);
 
     const ctx = Ctx{
@@ -226,8 +228,14 @@ fn create_test_step(ctx: *const Ctx) !void {
         });
     }
 
-    // add debug option to test
-    exe_tests.root_module.addOptions("build_options", ctx.build_options);
+    // As test runner doesn't support passing arguments,
+    // we have to create a temporary file for the debugging flag
+    exe_tests.root_module.addAnonymousImport("@build_options", .{
+        .root_source_file = ctx.b.addWriteFiles().add(
+            "generated_test_build_ctx.zig",
+            ctx.b.fmt("pub const debug :bool = {s};", .{if (debugging) "true" else "false"}),
+        ),
+    });
 
     const build_test_step = ctx.b.step("test", "Build unit tests");
     build_test_step.dependOn(&install_test.step);

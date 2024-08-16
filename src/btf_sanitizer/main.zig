@@ -5,25 +5,26 @@ const c = @cImport({
     @cInclude("libbpf_iter.h"); // this is libbpf's internal
     @cInclude("libelf.h");
 });
-const build_options = @import("build_options");
+
+var debug = false;
 
 fn print(comptime fmt: []const u8, args: anytype) void {
     std.debug.print("btf_sanitizer:" ++ fmt, args);
 }
 
 fn dbg_print(comptime fmt: []const u8, args: anytype) void {
-    if (build_options.debug) {
+    if (debug) {
         print(fmt, args);
     }
 }
 
 fn libbpf_dbg_printf(level: c.libbpf_print_level, fmt: [*c]const u8, args: @typeInfo(@typeInfo(@typeInfo(c.libbpf_print_fn_t).Optional.child).Pointer.child).Fn.params[2].type.?) callconv(.C) c_int {
-    if (!build_options.debug and level == c.LIBBPF_DEBUG) return 0;
+    if (!debug and level == c.LIBBPF_DEBUG) return 0;
 
     return c.vdprintf(std.io.getStdErr().handle, fmt, args);
 }
 
-// btf_sanitizer src_obj -o/path/to/dst_obj [-vmlinux/path/to/vmlinux]
+// btf_sanitizer src_obj -o/path/to/dst_obj [-vmlinux/path/to/vmlinux] [-debug]
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -42,6 +43,8 @@ pub fn main() !void {
             dst_arg = dst_arg orelse arg[2..];
         } else if (std.mem.startsWith(u8, arg, "-vmlinux")) {
             vmlinux_arg = vmlinux_arg orelse arg[8..];
+        } else if (std.mem.startsWith(u8, arg, "-debug")) {
+            debug = true;
         } else {
             src_arg = if (src_arg) |_| {
                 @panic("multiple src");

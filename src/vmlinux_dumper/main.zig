@@ -3,14 +3,15 @@ const libbpf = @cImport({
     @cInclude("stdio.h");
     @cInclude("btf.h");
 });
-const build_options = @import("build_options");
+
+var debug = false;
 
 fn print(comptime fmt: []const u8, args: anytype) void {
     std.debug.print("vmlinux_dumper:" ++ fmt, args);
 }
 
 fn dbg_print(comptime fmt: []const u8, args: anytype) void {
-    if (build_options.debug) {
+    if (debug) {
         print(fmt, args);
     }
 }
@@ -20,7 +21,7 @@ fn btf_dump_printf(ctx: ?*anyopaque, fmt: [*c]const u8, args: @typeInfo(@typeInf
     _ = libbpf.vdprintf(@intCast(fd), fmt, args);
 }
 
-// vmlinux_dumper [-vmlinux/path/to/vmlinux] -o/path/to/output
+// vmlinux_dumper [-vmlinux/path/to/vmlinux] -o/path/to/output [-debug]
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -36,6 +37,8 @@ pub fn main() !void {
             output_arg = arg[2..];
         } else if (std.mem.startsWith(u8, arg, "-vmlinux")) {
             vmlinux_arg = arg[8..];
+        } else if (std.mem.startsWith(u8, arg, "-debug")) {
+            debug = true;
         }
     }
 
@@ -46,7 +49,7 @@ pub fn main() !void {
     }
     const output = try std.fs.createFileAbsolute(output_arg.?, .{});
     defer output.close();
-    if (build_options.debug) print("vmlinux_dumper: dump vmlinux.h to {s}\n", .{output_arg.?});
+    if (debug) print("vmlinux_dumper: dump vmlinux.h to {s}\n", .{output_arg.?});
 
     const d = libbpf.btf_dump__new(btf, btf_dump_printf, @ptrFromInt(@as(usize, @intCast(output.handle))), null);
     if (d == null) {
