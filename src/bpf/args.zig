@@ -492,4 +492,5 @@ pub const TRACE_RECORD = extern struct {
     tpid: u64,
     regs: REGS,
     extra_offset: usize,
+    stack_id: isize,
 };

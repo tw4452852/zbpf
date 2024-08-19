@@ -15,7 +15,7 @@ const tp = bpf.Tracepoint{
 export fn test_stacktrace(ctx: *tp.Ctx()) linksection(tp.section()) callconv(.C) c_int {
     if (indexmap.lookup(0)) |i| {
         if (i.* < 0) {
-            const index = stackmap.get_current_stack(ctx);
+            const index = stackmap.get_current_stack(ctx, 0);
             i.* = @intCast(index);
             if (astackmap.lookup(0)) |p| {
                 _ = get_stack(ctx, p, @sizeOf(bpf.Map.STACK_TRACE), 0);

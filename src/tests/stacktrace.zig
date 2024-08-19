@@ -5,7 +5,7 @@ const testing = std.testing;
 const allocator = root.allocator;
 const libbpf = root.libbpf;
 
-const STACK_TRACE = [127]u64;
+const STACK_TRACE = @import("bpf").Map.STACK_TRACE;
 
 test "stacktrace" {
     const bytes = @embedFile("@stacktrace");

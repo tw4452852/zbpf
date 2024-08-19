@@ -276,7 +276,8 @@ pub fn RingBuffer(
     };
 }
 
-pub const STACK_TRACE = [127]u64;
+/// Structure used to save stack entries.
+pub const STACK_TRACE = [64]u64;
 
 /// Represent `BPF_MAP_TYPE_STACK_TRACE`.
 pub fn StackTraceMap(
@@ -301,8 +302,8 @@ pub fn StackTraceMap(
         }
 
         /// Get current stack, return the index
-        pub fn get_current_stack(self: *const Self, ctx: *anyopaque) u32 {
-            const rc = helpers.get_stackid(ctx, @ptrCast(&@TypeOf(self.map).def), 0);
+        pub fn get_current_stack(self: *const Self, ctx: *anyopaque, flag: u64) u32 {
+            const rc = helpers.get_stackid(ctx, @ptrCast(&@TypeOf(self.map).def), flag);
             if (rc < 0) {
                 exit(@src(), @as(c_long, rc));
             }
