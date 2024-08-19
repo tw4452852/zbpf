@@ -40,6 +40,13 @@ fn create_libbpf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.
     }).artifact("bpf");
 }
 
+fn create_libelf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
+    return b.dependency("libelf", .{
+        .target = target,
+        .optimize = optimize,
+    }).artifact("elf");
+}
+
 fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?[]const u8) *std.Build.Module {
     // build for native
     const target = b.host;
@@ -69,7 +76,7 @@ fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?
     return b.addModule("vmlinux", .{ .root_source_file = zigify.getOutput() });
 }
 
-fn create_btf_sanitizer(b: *std.Build, libbpf: *std.Build.Step.Compile) *std.Build.Step.Compile {
+fn create_btf_sanitizer(b: *std.Build, libbpf: *std.Build.Step.Compile, libelf: *std.Build.Step.Compile) *std.Build.Step.Compile {
     // build for native
     const target = b.host;
     const optimize: std.builtin.OptimizeMode = .ReleaseFast;
@@ -80,10 +87,7 @@ fn create_btf_sanitizer(b: *std.Build, libbpf: *std.Build.Step.Compile) *std.Bui
         .target = target,
         .optimize = optimize,
     });
-    const libelf = b.dependency("libelf", .{
-        .target = target,
-        .optimize = optimize,
-    }).artifact("elf");
+
     exe.linkLibrary(libelf);
     exe.linkLibrary(libbpf);
     exe.linkLibC();
@@ -99,10 +103,11 @@ fn create_native_tools(b: *std.Build, vmlinux_bin: ?[]const u8) struct { *std.Bu
     const optimize: std.builtin.OptimizeMode = .ReleaseFast;
 
     const libbpf = create_libbpf(b, target, optimize);
+    const libelf = create_libelf(b, target, optimize);
 
     return .{
         create_vmlinux(b, libbpf, vmlinux_bin),
-        create_btf_sanitizer(b, libbpf),
+        create_btf_sanitizer(b, libbpf, libelf),
     };
 }
 
@@ -127,6 +132,12 @@ const Ctx = struct {
     fuzzing: bool = false,
 };
 
+const TraceFunc = struct {
+    kind: enum { kprobe, syscall },
+    name: []const u8,
+    with_stack: bool,
+};
+
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     // WA for pointer alignment assumption of libbpf
@@ -135,11 +146,45 @@ pub fn build(b: *std.Build) !void {
     const build_options = b.addOptions();
     const vmlinux_bin = b.option([]const u8, "vmlinux", "vmlinux binary used for BTF generation");
     debugging = if (b.option(bool, "debug", "enable debugging log")) |v| v else false;
-    const kprobes = if (b.option([]const []const u8, "kprobe", "the traced kernel function name")) |v| v else &.{};
-    const syscalls = if (b.option([]const []const u8, "syscall", "the traced syscall name")) |v| v else &.{};
-    build_options.addOption(@TypeOf(debugging), "debug", debugging);
-    build_options.addOption(@TypeOf(kprobes), "kprobes", kprobes);
-    build_options.addOption(@TypeOf(syscalls), "syscalls", syscalls);
+    const kprobes = if (b.option([]const []const u8, "kprobe", "trace the specified kernel function")) |v| v else &.{};
+    const syscalls = if (b.option([]const []const u8, "syscall", "trace the specified syscall")) |v| v else &.{};
+    const stack_kprobes = if (b.option([]const []const u8, "kprobe_with_stack", "trace the specified kernel function with call stack")) |v| v else &.{};
+    const stack_syscalls = if (b.option([]const []const u8, "syscall_with_stack", "trace the specified syscall with call stack")) |v| v else &.{};
+
+    var funcs = std.ArrayList(TraceFunc).init(b.allocator);
+    var encountered_kprobes = std.StringHashMap(void).init(b.allocator);
+    var encountered_syscalls = std.StringHashMap(void).init(b.allocator);
+    defer {
+        encountered_syscalls.deinit();
+        encountered_kprobes.deinit();
+        funcs.deinit();
+    }
+
+    for (stack_kprobes) |name| {
+        if (!encountered_kprobes.contains(name)) {
+            try funcs.append(.{ .kind = .kprobe, .name = name, .with_stack = true });
+            try encountered_kprobes.put(name, {});
+        }
+    }
+    for (kprobes) |name| {
+        if (!encountered_kprobes.contains(name)) {
+            try funcs.append(.{ .kind = .kprobe, .name = name, .with_stack = false });
+            try encountered_kprobes.put(name, {});
+        }
+    }
+    for (stack_syscalls) |name| {
+        if (!encountered_syscalls.contains(name)) {
+            try funcs.append(.{ .kind = .syscall, .name = name, .with_stack = true });
+            try encountered_syscalls.put(name, {});
+        }
+    }
+    for (syscalls) |name| {
+        if (!encountered_syscalls.contains(name)) {
+            try funcs.append(.{ .kind = .syscall, .name = name, .with_stack = false });
+            try encountered_syscalls.put(name, {});
+        }
+    }
+    build_options.addOption([]const TraceFunc, "tracing_funcs", funcs.items);
 
     const libbpf = create_libbpf(b, target, optimize);
     const vmlinux, const btf_sanitizer = create_native_tools(b, vmlinux_bin);
@@ -161,9 +206,9 @@ pub fn build(b: *std.Build) !void {
     // default bpf program
     const bpf_src = if (b.option([]const u8, "bpf", "bpf program source path")) |v| v else "samples/perf_event.zig";
     const exe_src = if (b.option([]const u8, "main", "main executable source path")) |v| v else "src/hello.zig";
-    try create_target_step(&ctx, exe_src, bpf_src, null);
+    try create_target_step(&ctx, exe_src, bpf_src, null, &.{});
 
-    try create_target_step(&ctx, "src/trace.zig", "src/trace.bpf.zig", "trace");
+    try create_target_step(&ctx, "src/trace.zig", "src/trace.bpf.zig", "trace", &.{create_libelf(b, target, optimize)});
 
     try create_test_step(&ctx);
     try create_fuzz_test_step(&ctx);
@@ -171,7 +216,7 @@ pub fn build(b: *std.Build) !void {
     try create_docs_step(&ctx);
 }
 
-fn create_target_step(ctx: *const Ctx, main_path: []const u8, prog_path: []const u8, exe_name: ?[]const u8) !void {
+fn create_target_step(ctx: *const Ctx, main_path: []const u8, prog_path: []const u8, exe_name: ?[]const u8, extra_libs: []const *std.Build.Step.Compile) !void {
     const prog = create_bpf_prog(ctx, prog_path);
 
     const exe = ctx.b.addExecutable(.{
@@ -188,6 +233,9 @@ fn create_target_step(ctx: *const Ctx, main_path: []const u8, prog_path: []const
 
     exe.linkLibrary(ctx.libbpf_step);
     exe.linkLibC();
+    for (extra_libs) |lib| {
+        exe.linkLibrary(lib);
+    }
 
     // If it's fuzzing build, -fno-emit-bin
     if (ctx.fuzzing) {

@@ -4,18 +4,18 @@ const BPF = std.os.linux.BPF;
 const helpers = BPF.kern.helpers;
 const REGS = bpf.Args.REGS;
 const TRACE_RECORD = bpf.Args.TRACE_RECORD;
-
-const kprobes = @import("build_options").kprobes;
-const syscalls = @import("build_options").syscalls;
+const vmlinux = @import("vmlinux");
 
 var events = bpf.Map.RingBuffer("events", 16, 0).init();
+var stackmap = bpf.Map.StackTraceMap("stackmap", 16384).init();
 
-fn generate_kprobe(comptime name: []const u8, comptime id: u32) type {
+fn generate_kprobe(comptime name: []const u8, comptime id: u32, comptime with_stack: bool) type {
     return struct {
         const tracked_func = bpf.Kprobe{ .name = name };
 
         fn kprobe_entry(regs: *REGS) linksection(tracked_func.entry_section()) callconv(.C) c_long {
             const tpid = helpers.get_current_pid_tgid();
+            const stack_id = if (with_stack) stackmap.get_current_stack(regs, vmlinux.BPF_F_REUSE_STACKID) else -1;
             const resv = events.reserve(extern struct {
                 record: TRACE_RECORD,
                 extra: [tracked_func.Ctx().extra_record_size()]u8 = undefined,
@@ -27,6 +27,7 @@ fn generate_kprobe(comptime name: []const u8, comptime id: u32) type {
                     .regs = tracked_func.Ctx().deep_copy_to_user(regs, @intFromPtr(&resv.data_ptr.extra), true),
                     .extra_offset = @intFromPtr(&resv.data_ptr.extra) - @intFromPtr(resv.data_ptr),
                     .entry = true,
+                    .stack_id = stack_id,
                 },
             };
             resv.commit();
@@ -51,6 +52,7 @@ fn generate_kprobe(comptime name: []const u8, comptime id: u32) type {
                     .regs = tracked_func.Ctx().deep_copy_to_user(regs, @intFromPtr(&resv.data_ptr.extra), false),
                     .extra_offset = @intFromPtr(&resv.data_ptr.extra) - @intFromPtr(resv.data_ptr),
                     .entry = false,
+                    .stack_id = -1,
                 },
             };
             resv.commit();
@@ -63,7 +65,7 @@ fn generate_kprobe(comptime name: []const u8, comptime id: u32) type {
     };
 }
 
-fn generate_syscall(comptime name: []const u8, comptime id: u32) type {
+fn generate_syscall(comptime name: []const u8, comptime id: u32, with_stack: bool) type {
     return struct {
         const tracked_syscall = bpf.Ksyscall{ .name = name };
 
@@ -75,6 +77,7 @@ fn generate_syscall(comptime name: []const u8, comptime id: u32) type {
             }
 
             const tpid = helpers.get_current_pid_tgid();
+            const stack_id = if (with_stack) stackmap.get_current_stack(args, vmlinux.BPF_F_REUSE_STACKID) else -1;
             const resv = events.reserve(extern struct {
                 record: TRACE_RECORD,
                 extra: [tracked_syscall.Ctx().extra_record_size()]u8 = undefined,
@@ -86,6 +89,7 @@ fn generate_syscall(comptime name: []const u8, comptime id: u32) type {
                     .regs = tracked_syscall.Ctx().deep_copy_to_user(&regs, @intFromPtr(&resv.data_ptr.extra), true),
                     .extra_offset = @intFromPtr(&resv.data_ptr.extra) - @intFromPtr(resv.data_ptr),
                     .entry = true,
+                    .stack_id = stack_id,
                 },
             };
             resv.commit();
@@ -114,6 +118,7 @@ fn generate_syscall(comptime name: []const u8, comptime id: u32) type {
                     .regs = tracked_syscall.Ctx().deep_copy_to_user(&regs, @intFromPtr(&resv.data_ptr.extra), false),
                     .extra_offset = @intFromPtr(&resv.data_ptr.extra) - @intFromPtr(resv.data_ptr),
                     .entry = false,
+                    .stack_id = -1,
                 },
             };
             resv.commit();
@@ -127,11 +132,11 @@ fn generate_syscall(comptime name: []const u8, comptime id: u32) type {
 }
 
 comptime {
-    for (kprobes, 0..) |f, i| {
-        _ = generate_kprobe(f, i);
-    }
-
-    for (syscalls, kprobes.len..) |f, i| {
-        _ = generate_syscall(f, i);
+    for (@import("build_options").tracing_funcs, 0..) |f, i| {
+        if (f.kind == .kprobe) {
+            _ = generate_kprobe(f.name, i, f.with_stack);
+        } else {
+            _ = generate_syscall(f.name, i, f.with_stack);
+        }
     }
 }
