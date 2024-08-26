@@ -81,12 +81,16 @@ and [Host side](https://github.com/tw4452852/zbpf/blob/main/src/trace.zig).
 
 You could specify the kernel functions you want to trace with: `zig build trace -Dkprobe=<kernel_function_name> -Dkprobe=...`
 And for system calls: `zig build trace -Dsyscall=<syscall_name> -Dsyscall=...`.
-Moreover, if you also want to capture the call stack, use `-Dkprobe_with_stack=` and `-Dsyscall_with_stack` counterpart.
-Definitely, you could even mix them.
+Moreover, if you also want to capture the function's arguments, append the argument specifier, something like this:
+`-Dkprobe=<kernel_function_name>:arg0,arg1...`, it also supports access to the deeper field if the argument is a pointer to a struct:
+`-Dkprobe=<kernel_function_name>:arg0.field1.field0`.
+You could even control how the argument is shown by using all the supported specifier by Zig's `std.fmt`, something like this:
+`-Dkprobe=<kernel_function_name>:arg0.field1.field0/x` will show `arg0.field1.field0` in hexadecimal notation.
+Capturing call stack is also supported, append keyword `stack`, for example `-Dkprobe=<kernel_function_name>:arg0,stack`.
 
 And here's a quick demo:
 
-[![asciicast](https://asciinema.org/a/672074.svg)](https://asciinema.org/a/672074)
+[![asciicast](https://asciinema.org/a/675689.svg)](https://asciinema.org/a/675689)
 
 ## Samples
 

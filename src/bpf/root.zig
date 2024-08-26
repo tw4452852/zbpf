@@ -21,16 +21,20 @@ const builtin = std.builtin;
 const SourceLocation = builtin.SourceLocation;
 const StackTrace = builtin.StackTrace;
 
-/// Exit current bpf program with the location information (by @src()) and
-/// error return value (this is usually the return value of bpf helpers).
-///
-/// These information will be dumped in the kernel's trace buffer.
-pub inline fn exit(comptime src: SourceLocation, ret: anytype) noreturn {
+pub inline fn printErr(comptime src: SourceLocation, ret: anytype) void {
     const fmt = "error occur at %s:%d return %d";
     const file = @as(*const [src.file.len:0]u8, @ptrCast(src.file)).*;
     const line = src.line;
 
     _ = trace_printk(fmt, fmt.len + 1, @intFromPtr(&file), line, @bitCast(ret));
+}
+
+/// Exit current bpf program with the location information (by @src()) and
+/// error return value (this is usually the return value of bpf helpers).
+///
+/// These information will be dumped in the kernel's trace buffer.
+pub inline fn exit(comptime src: SourceLocation, ret: anytype) noreturn {
+    printErr(src, ret);
 
     asm volatile ("exit"
         :
