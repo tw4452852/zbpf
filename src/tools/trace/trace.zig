@@ -6,15 +6,17 @@ const libbpf = @cImport({
 const libelf = @cImport({
     @cInclude("libelf.h");
 });
+const comm = @import("comm.zig");
 const bpf = @import("bpf");
 const vmlinux = @import("vmlinux");
-const TRACE_RECORD = bpf.Args.TRACE_RECORD;
+const TRACE_RECORD = comm.TRACE_RECORD;
 const STACK_TRACE = bpf.Map.STACK_TRACE;
 const is_pointer = bpf.Args.is_pointer;
 const cast = bpf.Args.cast;
 const process = std.process;
 
-const tracing_funcs = @import("build_options").tracing_funcs;
+const tracing_funcs = @import("@build_options").tracing_funcs;
+const TF = @TypeOf(tracing_funcs[0]);
 
 var exiting = false;
 var debug = false;
@@ -175,42 +177,8 @@ fn on_sample(_ctx: ?*anyopaque, data: ?*anyopaque, _: usize) callconv(.C) c_int 
     // kprobes at first, then syscalls
     switch (record.id) {
         inline 0...tracing_funcs.len - 1 => |i| {
-            const func_name = tracing_funcs[i].name;
-            const tracked_func = if (tracing_funcs[i].kind == .kprobe) bpf.Kprobe{ .name = func_name } else bpf.Ksyscall{ .name = func_name };
-            const T = tracked_func.Ctx();
-            const args: *T = @ptrCast(&record.regs);
-            const pid: u32 = @truncate(record.tpid);
+            Args(tracing_funcs[i]).print(record, ctx.stdout);
 
-            ctx.stdout.print("pid: {}, {s} {s} {s}:\n", .{ pid, if (tracing_funcs[i].kind == .kprobe) "kprobe" else "syscall", func_name, if (record.entry) "enter" else "exit" }) catch return -1;
-            if (record.entry and comptime @hasDecl(T, "arg0")) {
-                const v = args.arg0();
-
-                ctx.stdout.print("arg0: {}\n", .{genFmt(v, @intFromPtr(record) + record.extra_offset, 0)}) catch return -1;
-            }
-            if (record.entry and comptime @hasDecl(T, "arg1")) {
-                const v = args.arg1();
-                ctx.stdout.print("arg1: {}\n", .{genFmt(v, @intFromPtr(record) + record.extra_offset, 0)}) catch return -1;
-            }
-            if (record.entry and comptime @hasDecl(T, "arg2")) {
-                const v = args.arg2();
-
-                ctx.stdout.print("arg2: {}\n", .{genFmt(v, @intFromPtr(record) + record.extra_offset, 0)}) catch return -1;
-            }
-            if (record.entry and comptime @hasDecl(T, "arg3")) {
-                const v = args.arg3();
-
-                ctx.stdout.print("arg3: {}\n", .{genFmt(v, @intFromPtr(record) + record.extra_offset, 0)}) catch return -1;
-            }
-            if (record.entry and comptime @hasDecl(T, "arg4")) {
-                const v = args.arg4();
-
-                ctx.stdout.print("arg4: {}\n", .{genFmt(v, @intFromPtr(record) + record.extra_offset, 0)}) catch return -1;
-            }
-            if (!record.entry and comptime @hasDecl(T, "ret")) {
-                const v = args.ret();
-
-                ctx.stdout.print("ret: {}\n", .{genFmt(v, @intFromPtr(record) + record.extra_offset, 0)}) catch return -1;
-            }
             if (record.stack_id >= 0) {
                 var entries: STACK_TRACE = undefined;
                 if (libbpf.bpf_map__lookup_elem(ctx.stackmap, &record.stack_id, @sizeOf(u32), &entries, @sizeOf(@TypeOf(entries)), 0) != 0) {
@@ -247,56 +215,43 @@ fn on_sample(_ctx: ?*anyopaque, data: ?*anyopaque, _: usize) callconv(.C) c_int 
     return 0;
 }
 
-fn genFmt(v: anytype, base: usize, level: usize) struct {
-    const T = @TypeOf(v);
-    base: usize,
-    ctx: T,
-    level: usize,
+fn Args(comptime tf: TF) type {
+    return struct {
+        pub fn print(
+            record: *const TRACE_RECORD,
+            writer: anytype,
+        ) void {
+            const pid: u32 = @truncate(record.tpid);
 
-    pub fn format(
-        self: @This(),
-        comptime _: []const u8,
-        _: std.fmt.FormatOptions,
-        writer: anytype,
-    ) !void {
-        if (self.level > 4) {
-            return writer.writeAll("...");
-        }
-
-        switch (@typeInfo(T)) {
-            .Pointer => {
-                if (@intFromPtr(self.ctx) < 4096) {
-                    const p: T = @ptrFromInt(@intFromPtr(self.ctx) + self.base);
-                    if (T == [*c]const u8) {
-                        return std.fmt.format(writer, "{s}", .{p});
-                    } else {
-                        return std.fmt.format(writer, "*{}", .{genFmt(p.*, self.base, self.level + 1)});
+            writer.print("pid: {}, {s} {s} {s}:\n", .{ pid, if (tf.kind == .kprobe) "kprobe" else "syscall", tf.name, if (record.entry) "enter" else "exit" }) catch {};
+            var extra: usize = @intFromPtr(record) + @sizeOf(TRACE_RECORD);
+            if (record.entry) {
+                inline for (tf.args) |spec| {
+                    if (comptime std.mem.startsWith(u8, spec, "arg")) {
+                        const Arg = comm.Arg(tf.name, tf.kind == .syscall);
+                        const T = Arg.Field(spec);
+                        const placeholder = comptime Arg.placeholder(spec);
+                        const is_string = comptime std.mem.eql(u8, placeholder, "{s}");
+                        const v: *align(1) const T = @ptrFromInt(extra);
+                        writer.print("{s}: " ++ placeholder ++ "\n", .{ spec, if (is_string) std.mem.sliceTo(v, 0) else v.* }) catch {};
+                        extra += @sizeOf(T);
                     }
-                } else {
-                    return std.fmt.format(writer, "{*}", .{self.ctx});
                 }
-            },
-            .Struct => |info| {
-                try writer.writeAll(@typeName(T));
-                try writer.writeAll("{");
-                inline for (info.fields, 0..) |f, i| {
-                    if (i == 0) {
-                        try writer.writeAll(" .");
-                    } else {
-                        try writer.writeAll(", .");
+            } else {
+                inline for (tf.args) |spec| {
+                    if (comptime std.mem.startsWith(u8, spec, "ret")) {
+                        const Arg = comm.Arg(tf.name, tf.kind == .syscall);
+                        const T = Arg.Field(spec);
+                        const placeholder = comptime Arg.placeholder(spec);
+                        const is_string = comptime std.mem.eql(u8, placeholder, "{s}");
+                        const v: *align(1) const T = @ptrFromInt(extra);
+                        writer.print("{s}: " ++ placeholder ++ "\n", .{ spec, if (is_string) std.mem.sliceTo(v, 0) else v.* }) catch {};
+                        extra += @sizeOf(T);
                     }
-                    try writer.writeAll(f.name);
-                    try writer.writeAll(" = ");
-                    try std.fmt.format(writer, "{}", .{genFmt(@field(self.ctx, f.name), self.base, self.level + 1)});
                 }
-                return writer.writeAll(" }");
-            },
-            else => {},
+            }
         }
-        return std.fmt.format(writer, "{any}", .{self.ctx});
-    }
-} {
-    return .{ .ctx = v, .base = base, .level = level };
+    };
 }
 
 const Ksyms = struct {

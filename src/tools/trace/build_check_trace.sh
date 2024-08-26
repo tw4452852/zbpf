@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-zig build trace -Dsyscall=unlinkat -Dkprobe=do_unlinkat -Dkprobe_with_stack=do_rmdir
+zig build trace -Dsyscall=unlinkat:arg1,ret -Dkprobe=do_unlinkat:arg0,arg1,ret -Dkprobe=do_rmdir:arg0,ret,stack
 sudo ./zig-out/bin/trace --timeout 2 > ./trace_output.txt &
 sleep 1
 touch test.file

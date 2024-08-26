@@ -2,7 +2,7 @@ const vmlinux = @import("vmlinux");
 const std = @import("std");
 const StructField = std.builtin.Type.StructField;
 const helpers = std.os.linux.BPF.kern.helpers;
-const exit = @import("root.zig").exit;
+const printErr = @import("root.zig").printErr;
 
 extern var LINUX_HAS_SYSCALL_WRAPPER: bool linksection(".kconfig");
 
@@ -193,7 +193,8 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
                 } else {
                     var ret: RET = undefined;
                     const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg0_ptr());
-                    return if (err != 0) exit(@src(), err) else ret;
+                    if (err != 0) printErr(@src(), err);
+                    return ret;
                 }
             }
         };
@@ -207,7 +208,8 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
                 } else {
                     var ret: RET = undefined;
                     const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg1_ptr());
-                    return if (err != 0) exit(@src(), err) else ret;
+                    if (err != 0) printErr(@src(), err);
+                    return ret;
                 }
             }
         };
@@ -221,7 +223,8 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
                 } else {
                     var ret: RET = undefined;
                     const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg2_ptr());
-                    return if (err != 0) exit(@src(), err) else ret;
+                    if (err != 0) printErr(@src(), err);
+                    return ret;
                 }
             }
         };
@@ -235,7 +238,8 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
                 } else {
                     var ret: RET = undefined;
                     const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg3_ptr(for_syscall));
-                    return if (err != 0) exit(@src(), err) else ret;
+                    if (err != 0) printErr(@src(), err);
+                    return ret;
                 }
             }
         };
@@ -249,7 +253,8 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
                 } else {
                     var ret: RET = undefined;
                     const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg4_ptr());
-                    return if (err != 0) exit(@src(), err) else ret;
+                    if (err != 0) printErr(@src(), err);
+                    return ret;
                 }
             }
         };
@@ -263,142 +268,9 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
                 } else {
                     var v: RET = undefined;
                     const err = helpers.probe_read_kernel(@ptrCast(&v), @sizeOf(RET), self.get_regs().ret_ptr());
-                    return if (err != 0) exit(@src(), err) else v;
+                    if (err != 0) printErr(@src(), err);
+                    return v;
                 }
-            }
-        };
-
-        pub usingnamespace if (!in_bpf_program) struct {} else struct {
-            pub fn extra_record_size() usize {
-                comptime var size: usize = 0;
-
-                if (f.Fn.params.len > 0 and is_pointer(f.Fn.params[0].type.?)) {
-                    size += pointer_size(f.Fn.params[0].type.?, 0);
-                }
-                if (f.Fn.params.len > 1 and is_pointer(f.Fn.params[1].type.?)) {
-                    size += pointer_size(f.Fn.params[1].type.?, 0);
-                }
-                if (f.Fn.params.len > 2 and is_pointer(f.Fn.params[2].type.?)) {
-                    size += pointer_size(f.Fn.params[2].type.?, 0);
-                }
-                if (f.Fn.params.len > 3 and is_pointer(f.Fn.params[3].type.?)) {
-                    size += pointer_size(f.Fn.params[3].type.?, 0);
-                }
-                if (f.Fn.params.len > 4 and is_pointer(f.Fn.params[4].type.?)) {
-                    size += pointer_size(f.Fn.params[4].type.?, 0);
-                }
-                if (f.Fn.return_type.? != void and is_pointer(f.Fn.return_type.?)) {
-                    size += pointer_size(f.Fn.return_type.?, 0);
-                }
-
-                return size;
-            }
-
-            fn pointer_size(comptime T: type, comptime level: usize) usize {
-                // special case for char*
-                if (T == [*c]const u8) {
-                    return 64;
-                }
-
-                const Child = deref_pointer(T);
-                comptime var size: usize = if (Child == anyopaque) 0 else @sizeOf(Child);
-                // At most 2 levels deep
-                if (level == 2) {
-                    return size;
-                }
-
-                return switch (@typeInfo(Child)) {
-                    inline .Pointer, .Optional => size + pointer_size(Child, level + 1),
-                    inline .Struct => |info| blk: {
-                        inline for (info.fields) |field| {
-                            if (is_pointer(field.type)) {
-                                size += pointer_size(field.type, level + 1);
-                            }
-                        }
-
-                        break :blk size;
-                    },
-                    else => size,
-                };
-            }
-
-            pub fn deep_copy_to_user(src: *const REGS, start: usize, entry: bool) REGS {
-                var dst: REGS = src.*;
-                var buf: [*c]u8 = @ptrFromInt(start);
-
-                if (entry) {
-                    if (f.Fn.params.len > 0 and is_pointer(f.Fn.params[0].type.?)) {
-                        dst.arg0_ptr().* = dup_pointer(f.Fn.params[0].type.?, @ptrFromInt(dst.arg0_ptr().*), &buf, 0, start);
-                    }
-                    if (f.Fn.params.len > 1 and is_pointer(f.Fn.params[1].type.?)) {
-                        dst.arg1_ptr().* = dup_pointer(f.Fn.params[1].type.?, @ptrFromInt(dst.arg1_ptr().*), &buf, 0, start);
-                    }
-                    if (f.Fn.params.len > 2 and is_pointer(f.Fn.params[2].type.?)) {
-                        dst.arg2_ptr().* = dup_pointer(f.Fn.params[2].type.?, @ptrFromInt(dst.arg2_ptr().*), &buf, 0, start);
-                    }
-                    if (f.Fn.params.len > 3 and is_pointer(f.Fn.params[3].type.?)) {
-                        dst.arg3_ptr().* = dup_pointer(f.Fn.params[3].type.?, @ptrFromInt(dst.arg3_ptr().*), &buf, 0, start);
-                    }
-                    if (f.Fn.params.len > 4 and is_pointer(f.Fn.params[4].type.?)) {
-                        dst.arg4_ptr().* = dup_pointer(f.Fn.params[4].type.?, @ptrFromInt(dst.arg4_ptr().*), &buf, 0, start);
-                    }
-                } else {
-                    if (f.Fn.return_type.? != void and is_pointer(f.Fn.return_type.?)) {
-                        dst.ret_ptr().* = dup_pointer(f.Fn.return_type.?, @ptrFromInt(dst.ret_ptr().*), &buf, 0, start);
-                    }
-                }
-
-                return dst;
-            }
-
-            fn dup_pointer(comptime T: type, src: T, buf: *[*c]u8, level: usize, start: usize) usize {
-                // special case for char*
-                if (T == [*c]const u8) {
-                    const dst = buf.*;
-                    const n = helpers.probe_read_str(dst, 64, src);
-                    if (n < 0) {
-                        return @intCast(n);
-                    }
-                    buf.* += @as(usize, @intCast(n));
-                    return @intFromPtr(dst) - start;
-                }
-
-                const Child = deref_pointer(T);
-                // *anyopaque
-                if (Child == anyopaque) {
-                    return @intFromPtr(src);
-                }
-                const dst: T = @alignCast(@ptrCast(buf.*));
-                var ret = helpers.probe_read_kernel(dst, @sizeOf(Child), src);
-                if (ret != 0) {
-                    return @intCast(ret);
-                }
-                buf.* += @sizeOf(Child);
-
-                // At most 2 levels deep
-                if (level == 2) {
-                    return @intFromPtr(dst) - start;
-                }
-
-                switch (@typeInfo(Child)) {
-                    inline .Pointer => {
-                        dst.* = dup_pointer(Child, src.*, buf, level + 1, start);
-                    },
-                    inline .Struct => |info| {
-                        inline for (info.fields) |field| {
-                            if (is_pointer(field.type)) {
-                                const p = dup_pointer(field.type, @ptrFromInt(@intFromPtr(dst) + @offsetOf(Child, field.name)), buf, level + 1, start);
-                                ret = helpers.probe_read(@ptrFromInt(@intFromPtr(dst) + @offsetOf(Child, field.name)), @sizeOf(field.type), &p);
-                                if (ret != 0) {
-                                    return @intCast(ret);
-                                }
-                            }
-                        }
-                    },
-                    else => {},
-                }
-
-                return @intFromPtr(dst) - start;
             }
         };
     };
@@ -472,25 +344,5 @@ pub fn SYSCALL(comptime name: []const u8) type {
                 return @as(*T, @ptrCast(self)).ret();
             }
         };
-
-        pub usingnamespace if (!in_bpf_program) struct {} else struct {
-            pub fn extra_record_size() usize {
-                return T.extra_record_size();
-            }
-
-            pub fn deep_copy_to_user(src: *const REGS, start: usize, entry: bool) REGS {
-                return T.deep_copy_to_user(src, start, entry);
-            }
-        };
     };
 }
-
-/// Structure passing from BPF side to userspace for tracing.
-pub const TRACE_RECORD = extern struct {
-    id: u32,
-    entry: bool,
-    tpid: u64,
-    regs: REGS,
-    extra_offset: usize,
-    stack_id: isize,
-};
