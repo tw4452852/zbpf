@@ -87,7 +87,7 @@ fn create_btf_sanitizer(b: *std.Build, libbpf: *std.Build.Step.Compile) *std.Bui
     exe.linkLibrary(libelf);
     exe.linkLibrary(libbpf);
     exe.linkLibC();
-    exe.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/btf_sanitizer/" } });
+    exe.addIncludePath(b.path("src/btf_sanitizer/"));
     b.installArtifact(exe);
 
     return exe;
@@ -123,6 +123,8 @@ const Ctx = struct {
     build_options: *std.Build.Step.Options,
     btf_sanitizer: *std.Build.Step.Compile,
     vmlinux_bin_path: ?[]const u8,
+    test_filter: ?[]const u8,
+    fuzzing: bool = false,
 };
 
 pub fn build(b: *std.Build) !void {
@@ -153,6 +155,7 @@ pub fn build(b: *std.Build) !void {
         .vmlinux = vmlinux,
         .btf_sanitizer = btf_sanitizer,
         .vmlinux_bin_path = vmlinux_bin,
+        .test_filter = b.option([]const u8, "test", "test filter"),
     };
 
     // default bpf program
@@ -163,6 +166,7 @@ pub fn build(b: *std.Build) !void {
     try create_target_step(&ctx, "src/trace.zig", "src/trace.bpf.zig", "trace");
 
     try create_test_step(&ctx);
+    try create_fuzz_test_step(&ctx);
 
     try create_docs_step(&ctx);
 }
@@ -180,27 +184,33 @@ fn create_target_step(ctx: *const Ctx, main_path: []const u8, prog_path: []const
         .root_source_file = prog,
     });
     exe.root_module.addImport("bpf", ctx.bpf);
-    exe.root_module.addImport("vmlinux", ctx.vmlinux);
     exe.root_module.addOptions("build_options", ctx.build_options);
 
     exe.linkLibrary(ctx.libbpf_step);
     exe.linkLibC();
 
-    // if executable is not named, it is default target
-    // otherwise, create a step for it
-    if (exe_name) |name| {
-        const install_exe = ctx.b.addInstallArtifact(exe, .{});
-        const description = ctx.b.fmt("Build {s}", .{name});
-        const build_step = ctx.b.step(name, description);
-        build_step.dependOn(&install_exe.step);
+    // If it's fuzzing build, -fno-emit-bin
+    if (ctx.fuzzing) {
+        const build_step = ctx.b.step(if (exe_name) |name| name else "fuzz", "fuzz");
+        build_step.dependOn(&exe.step);
     } else {
-        ctx.b.installArtifact(exe);
+
+        // if executable is not named, it is default target
+        // otherwise, create a step for it
+        if (exe_name) |name| {
+            const install_exe = ctx.b.addInstallArtifact(exe, .{});
+            const description = ctx.b.fmt("Build {s}", .{name});
+            const build_step = ctx.b.step(name, description);
+            build_step.dependOn(&install_exe.step);
+        } else {
+            ctx.b.installArtifact(exe);
+        }
     }
 }
 
 fn create_test_step(ctx: *const Ctx) !void {
-    const filter = ctx.b.option([]const u8, "test", "test filter");
     // Creates a step for unit testing.
+    const filter = ctx.test_filter;
     const exe_tests = ctx.b.addTest(.{
         .root_source_file = ctx.b.path("src/tests/root.zig"),
         .target = ctx.target,
@@ -239,6 +249,47 @@ fn create_test_step(ctx: *const Ctx) !void {
 
     const build_test_step = ctx.b.step("test", "Build unit tests");
     build_test_step.dependOn(&install_test.step);
+}
+
+fn create_fuzz_test_step(ctx: *const Ctx) !void {
+    // Create a dedicated step for building trace with customized vmlinux module
+    var _ctx = ctx.*;
+    _ctx.vmlinux = ctx.b.addModule("_vmlinux", .{
+        .root_source_file = ctx.b.path("src/tests/vmlinux.zig"),
+    });
+    _ctx.bpf = create_bpf(ctx.b, _ctx.vmlinux);
+    _ctx.fuzzing = true;
+    try create_target_step(&_ctx, "src/tools/trace/trace.zig", "src/tools/trace/trace.bpf.zig", "_trace", &.{});
+
+    // Creates a step for fuzzing test.
+    const exe_tests = ctx.b.addTest(.{
+        .root_source_file = ctx.b.path("src/tests/fuzz.zig"),
+        .target = ctx.target,
+        .optimize = ctx.optimize,
+        .filter = ctx.test_filter,
+    });
+    exe_tests.linkLibrary(ctx.libbpf_step);
+    exe_tests.linkLibC();
+
+    // As test runner doesn't support passing arguments,
+    // we have to create a temporary file for the debugging flag
+    exe_tests.root_module.addAnonymousImport("@build_options", .{
+        .root_source_file = ctx.b.addWriteFiles().add(
+            "generated_test_build_ctx.zig",
+            ctx.b.fmt(
+                \\pub const debug :bool = {s};
+                \\pub const zig_exe = "{s}";
+            , .{
+                if (debugging) "true" else "false",
+                ctx.b.graph.zig_exe,
+            }),
+        ),
+    });
+
+    const run = ctx.b.addRunArtifact(exe_tests);
+
+    const step = ctx.b.step("fuzz-test", "Build and run fuzzing tests");
+    step.dependOn(&run.step);
 }
 
 fn create_docs_step(ctx: *const Ctx) !void {
