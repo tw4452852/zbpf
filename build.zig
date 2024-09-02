@@ -220,7 +220,9 @@ fn create_test_step(ctx: *const Ctx) !void {
     exe_tests.linkLibrary(ctx.libbpf_step);
     exe_tests.root_module.addImport("bpf", ctx.bpf);
     exe_tests.linkLibC();
-    const install_test = ctx.b.addInstallArtifact(exe_tests, .{});
+    exe_tests.setExecCmd(&.{ "sudo", null });
+
+    const run = ctx.b.addRunArtifact(exe_tests);
 
     // Create bpf programs for test
     var sample_dir = try fs.cwd().openDir("samples", .{ .iterate = true });
@@ -248,7 +250,7 @@ fn create_test_step(ctx: *const Ctx) !void {
     });
 
     const build_test_step = ctx.b.step("test", "Build unit tests");
-    build_test_step.dependOn(&install_test.step);
+    build_test_step.dependOn(&run.step);
 }
 
 fn create_fuzz_test_step(ctx: *const Ctx) !void {
