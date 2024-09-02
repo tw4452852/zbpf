@@ -222,8 +222,6 @@ fn create_test_step(ctx: *const Ctx) !void {
     exe_tests.linkLibC();
     exe_tests.setExecCmd(&.{ "sudo", null });
 
-    const run = ctx.b.addRunArtifact(exe_tests);
-
     // Create bpf programs for test
     var sample_dir = try fs.cwd().openDir("samples", .{ .iterate = true });
     defer sample_dir.close();
@@ -249,8 +247,15 @@ fn create_test_step(ctx: *const Ctx) !void {
         ),
     });
 
-    const build_test_step = ctx.b.step("test", "Build unit tests");
-    build_test_step.dependOn(&run.step);
+    const run_unit_test = ctx.b.addRunArtifact(exe_tests);
+
+    // run tools/trace test script
+    const run_trace_script = ctx.b.addSystemCommand(&.{ "sh", "src/tools/trace/build_check_trace.sh" });
+    run_trace_script.expectExitCode(0);
+
+    const test_step = ctx.b.step("test", "Build and run all unit tests");
+    test_step.dependOn(&run_unit_test.step);
+    test_step.dependOn(&run_trace_script.step);
 }
 
 fn create_fuzz_test_step(ctx: *const Ctx) !void {
