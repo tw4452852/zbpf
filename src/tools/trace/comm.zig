@@ -59,8 +59,8 @@ pub fn Arg(comptime name: []const u8, comptime is_syscall: bool) type {
 
             var ti = @typeInfo(FT);
             inline while (comptime it.next()) |field_name| : (ti = @typeInfo(FT)) {
-                if (ti == .Optional) {
-                    FT = ti.Optional.child;
+                if (ti == .optional) {
+                    FT = ti.optional.child;
                     ti = @typeInfo(FT);
                 }
 
@@ -81,8 +81,8 @@ pub fn Arg(comptime name: []const u8, comptime is_syscall: bool) type {
                 if (is_string(FT)) return String;
             }
             return switch (ti) {
-                .Pointer => |info| info.child,
-                .Optional => |info| info.child,
+                .pointer => |info| info.child,
+                .optional => |info| info.child,
                 else => FT,
             };
         }
@@ -115,14 +115,14 @@ pub fn Arg(comptime name: []const u8, comptime is_syscall: bool) type {
                 }
 
                 comptime var ti = @typeInfo(FT);
-                var src: usize = if (ti == .Pointer) @intFromPtr(arg) else @intFromPtr(&arg);
+                var src: usize = if (ti == .pointer) @intFromPtr(arg) else @intFromPtr(&arg);
 
                 inline while (comptime it.next()) |field_name| {
-                    if (ti == .Optional) {
-                        FT = ti.Optional.child;
+                    if (ti == .pptional) {
+                        FT = ti.optional.child;
                         ti = @typeInfo(FT);
                     }
-                    if (ti == .Pointer) {
+                    if (ti == .pointer) {
                         FT = ti.Pointer.child;
                         ti = @typeInfo(FT);
                     }

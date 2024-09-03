@@ -63,20 +63,22 @@ fn Map(
     }} else [_]StructField{});
 
     const Def = @Type(.{
-        .Struct = .{
+        .@"struct" = .{
             .layout = .@"extern",
             .is_tuple = false,
             .fields = &fields,
             .decls = &[_]Declaration{},
         },
     });
+
     return struct {
         var def: Def = undefined;
+        const p: *Def = &def;
 
         const Self = @This();
 
         comptime {
-            @export(Self.def, .{ .name = name, .section = ".maps" });
+            @export(p, .{ .name = name, .section = ".maps" });
         }
 
         /// Perform a lookup in *map* for an entry associated to *key*.
