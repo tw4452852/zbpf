@@ -16,7 +16,7 @@ fn dbg_print(comptime fmt: []const u8, args: anytype) void {
     }
 }
 
-fn btf_dump_printf(ctx: ?*anyopaque, fmt: [*c]const u8, args: @typeInfo(@typeInfo(@typeInfo(libbpf.btf_dump_printf_fn_t).Optional.child).Pointer.child).Fn.params[2].type.?) callconv(.C) void {
+fn btf_dump_printf(ctx: ?*anyopaque, fmt: [*c]const u8, args: @typeInfo(@typeInfo(@typeInfo(libbpf.btf_dump_printf_fn_t).optional.child).pointer.child).@"fn".params[2].type.?) callconv(.C) void {
     const fd = @intFromPtr(ctx);
     _ = libbpf.vdprintf(@intCast(fd), fmt, args);
 }
@@ -49,7 +49,7 @@ pub fn main() !void {
     }
     const output = try std.fs.createFileAbsolute(output_arg.?, .{});
     defer output.close();
-    if (debug) print("vmlinux_dumper: dump vmlinux.h to {s}\n", .{output_arg.?});
+    dbg_print("dump vmlinux.zig to {s}\n", .{output_arg.?});
 
     const d = libbpf.btf_dump__new(btf, btf_dump_printf, @ptrFromInt(@as(usize, @intCast(output.handle))), null);
     if (d == null) {

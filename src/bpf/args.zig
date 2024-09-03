@@ -29,7 +29,7 @@ pub fn Ctx(comptime func_name: []const u8) type {
     const f = @typeInfo(@TypeOf(@field(vmlinux, "_zig_" ++ func_name)));
     comptime var fields: []const StructField = &.{};
 
-    for (0.., f.Fn.params) |i, arg| {
+    for (0.., f.@"fn".params) |i, arg| {
         fields = fields ++ [_]StructField{
             .{
                 .name = std.fmt.comptimePrint("arg{}", .{i}),
@@ -44,7 +44,7 @@ pub fn Ctx(comptime func_name: []const u8) type {
     fields = fields ++ [_]StructField{
         .{
             .name = "ret",
-            .type = f.Fn.return_type.?,
+            .type = f.@"fn".return_type.?,
             .default_value = null,
             .is_comptime = false,
             .alignment = @sizeOf(u64),
@@ -52,7 +52,7 @@ pub fn Ctx(comptime func_name: []const u8) type {
     };
 
     return @Type(.{
-        .Struct = .{
+        .@"struct" = .{
             .layout = .@"extern",
             .is_tuple = false,
             .fields = fields,
@@ -140,15 +140,15 @@ pub const REGS = extern struct {
 /// Check if the type is ?*T or *T.
 pub inline fn is_pointer(comptime typ: type) bool {
     const ti = @typeInfo(typ);
-    return ti == .Pointer or (ti == .Optional and @typeInfo(ti.Optional.child) == .Pointer);
+    return ti == .pointer or (ti == .optional and @typeInfo(ti.optional.child) == .pointer);
 }
 
 /// Get the pointee type
 pub inline fn deref_pointer(comptime typ: type) type {
     const ti = @typeInfo(typ);
     return switch (ti) {
-        inline .Pointer => |info| return info.child,
-        inline .Optional => |info| return @typeInfo(info.child).Pointer.child,
+        inline .pointer => |info| return info.child,
+        inline .optional => |info| return @typeInfo(info.child).pointer.child,
         else => @compileLog(ti),
     };
 }
@@ -158,8 +158,8 @@ pub fn cast(comptime T: type, rc: c_ulong) T {
     if (is_pointer(T)) return @ptrFromInt(rc);
 
     const ti = @typeInfo(T);
-    if (ti == .Int) {
-        if (ti.Int.signedness == .signed) {
+    if (ti == .int) {
+        if (ti.int.signedness == .signed) {
             return @truncate(@as(c_long, @bitCast(rc)));
         }
         return @truncate(rc);
@@ -184,8 +184,8 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
             return @alignCast(@ptrCast(self));
         }
 
-        pub usingnamespace if (f.Fn.params.len < 1) struct {} else struct {
-            const RET = f.Fn.params[0].type.?;
+        pub usingnamespace if (f.@"fn".params.len < 1) struct {} else struct {
+            const RET = f.@"fn".params[0].type.?;
 
             pub fn arg0(self: *Self) RET {
                 if (!in_bpf_program) {
@@ -199,8 +199,8 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
             }
         };
 
-        pub usingnamespace if (f.Fn.params.len < 2) struct {} else struct {
-            const RET = f.Fn.params[1].type.?;
+        pub usingnamespace if (f.@"fn".params.len < 2) struct {} else struct {
+            const RET = f.@"fn".params[1].type.?;
 
             pub fn arg1(self: *Self) RET {
                 if (!in_bpf_program) {
@@ -214,8 +214,8 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
             }
         };
 
-        pub usingnamespace if (f.Fn.params.len < 3) struct {} else struct {
-            const RET = f.Fn.params[2].type.?;
+        pub usingnamespace if (f.@"fn".params.len < 3) struct {} else struct {
+            const RET = f.@"fn".params[2].type.?;
 
             pub fn arg2(self: *Self) RET {
                 if (!in_bpf_program) {
@@ -229,8 +229,8 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
             }
         };
 
-        pub usingnamespace if (f.Fn.params.len < 4) struct {} else struct {
-            const RET = f.Fn.params[3].type.?;
+        pub usingnamespace if (f.@"fn".params.len < 4) struct {} else struct {
+            const RET = f.@"fn".params[3].type.?;
 
             pub fn arg3(self: *Self) RET {
                 if (!in_bpf_program) {
@@ -244,8 +244,8 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
             }
         };
 
-        pub usingnamespace if (f.Fn.params.len < 5) struct {} else struct {
-            const RET = f.Fn.params[4].type.?;
+        pub usingnamespace if (f.@"fn".params.len < 5) struct {} else struct {
+            const RET = f.@"fn".params[4].type.?;
 
             pub fn arg4(self: *Self) RET {
                 if (!in_bpf_program) {
@@ -259,8 +259,8 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
             }
         };
 
-        pub usingnamespace if (f.Fn.return_type.? == void) struct {} else struct {
-            const RET = f.Fn.return_type.?;
+        pub usingnamespace if (f.@"fn".return_type.? == void) struct {} else struct {
+            const RET = f.@"fn".return_type.?;
 
             pub fn ret(self: *Self) RET {
                 if (!in_bpf_program) {
@@ -297,48 +297,48 @@ pub fn SYSCALL(comptime name: []const u8) type {
                 @ptrCast(self);
         }
 
-        pub usingnamespace if (f.Fn.params.len < 1) struct {} else struct {
-            const RET = f.Fn.params[0].type.?;
+        pub usingnamespace if (f.@"fn".params.len < 1) struct {} else struct {
+            const RET = f.@"fn".params[0].type.?;
 
             pub fn arg0(self: *Self) RET {
                 return self.get_arg_ctx().arg0();
             }
         };
 
-        pub usingnamespace if (f.Fn.params.len < 2) struct {} else struct {
-            const RET = f.Fn.params[1].type.?;
+        pub usingnamespace if (f.@"fn".params.len < 2) struct {} else struct {
+            const RET = f.@"fn".params[1].type.?;
 
             pub fn arg1(self: *Self) RET {
                 return self.get_arg_ctx().arg1();
             }
         };
 
-        pub usingnamespace if (f.Fn.params.len < 3) struct {} else struct {
-            const RET = f.Fn.params[2].type.?;
+        pub usingnamespace if (f.@"fn".params.len < 3) struct {} else struct {
+            const RET = f.@"fn".params[2].type.?;
 
             pub fn arg2(self: *Self) RET {
                 return self.get_arg_ctx().arg2();
             }
         };
 
-        pub usingnamespace if (f.Fn.params.len < 4) struct {} else struct {
-            const RET = f.Fn.params[3].type.?;
+        pub usingnamespace if (f.@"fn".params.len < 4) struct {} else struct {
+            const RET = f.@"fn".params[3].type.?;
 
             pub fn arg3(self: *Self) RET {
                 return self.get_arg_ctx().arg3();
             }
         };
 
-        pub usingnamespace if (f.Fn.params.len < 5) struct {} else struct {
-            const RET = f.Fn.params[4].type.?;
+        pub usingnamespace if (f.@"fn".params.len < 5) struct {} else struct {
+            const RET = f.@"fn".params[4].type.?;
 
             pub fn arg4(self: *Self) RET {
                 return self.get_arg_ctx().arg4();
             }
         };
 
-        pub usingnamespace if (f.Fn.return_type.? == void) struct {} else struct {
-            const RET = f.Fn.return_type.?;
+        pub usingnamespace if (f.@"fn".return_type.? == void) struct {} else struct {
+            const RET = f.@"fn".return_type.?;
 
             pub fn ret(self: *Self) RET {
                 return @as(*T, @ptrCast(self)).ret();

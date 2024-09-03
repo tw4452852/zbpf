@@ -60,7 +60,7 @@ fn generate(comptime name: []const u8, comptime id: u32, comptime with_stack: bo
         }
 
         comptime {
-            @export(_entry, .{ .name = name ++ if (is_syscall) "_syscall_entry" else "_kprobe_entry" });
+            @export(&_entry, .{ .name = name ++ if (is_syscall) "_syscall_entry" else "_kprobe_entry" });
         }
 
         fn _exit(ctx: *F.Ctx()) linksection(F.exit_section()) callconv(.C) c_long {
@@ -95,7 +95,7 @@ fn generate(comptime name: []const u8, comptime id: u32, comptime with_stack: bo
                 }
             }
             if (want_ret) {
-                @export(_exit, .{ .name = name ++ if (is_syscall) "_syscall_exit" else "_kprobe_exit" });
+                @export(&_exit, .{ .name = name ++ if (is_syscall) "_syscall_exit" else "_kprobe_exit" });
             }
         }
     };

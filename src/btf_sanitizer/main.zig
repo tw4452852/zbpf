@@ -18,7 +18,7 @@ fn dbg_print(comptime fmt: []const u8, args: anytype) void {
     }
 }
 
-fn libbpf_dbg_printf(level: c.libbpf_print_level, fmt: [*c]const u8, args: @typeInfo(@typeInfo(@typeInfo(c.libbpf_print_fn_t).Optional.child).Pointer.child).Fn.params[2].type.?) callconv(.C) c_int {
+fn libbpf_dbg_printf(level: c.libbpf_print_level, fmt: [*c]const u8, args: @typeInfo(@typeInfo(@typeInfo(c.libbpf_print_fn_t).optional.child).pointer.child).@"fn".params[2].type.?) callconv(.C) c_int {
     if (!debug and level == c.LIBBPF_DEBUG) return 0;
 
     return c.vdprintf(std.io.getStdErr().handle, fmt, args);
