@@ -74,7 +74,7 @@ fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?
         .target = target,
         .optimize = optimize,
     });
-    zigify.addIncludeDir("src/vmlinux_dumper");
+    zigify.addIncludePath(b.path("src/vmlinux_dumper"));
     return b.addModule("vmlinux", .{ .root_source_file = zigify.getOutput() });
 }
 
