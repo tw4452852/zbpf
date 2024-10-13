@@ -76,8 +76,8 @@ It's heavily inspired by [retsnoop](https://github.com/anakryiko/retsnoop).
 One improvement I made (which is also what I feel when using retsnoop) is that `trace` support
 show parameters according its type (thanks to the Zig type system).
 This is very helpful when debugging linux kernel.
-For more details, you could check the implementation: [BPF side](https://github.com/tw4452852/zbpf/blob/main/src/trace.bpf.zig)
-and [Host side](https://github.com/tw4452852/zbpf/blob/main/src/trace.zig).
+For more details, you could check the implementation: [BPF side](https://github.com/tw4452852/zbpf/blob/main/src/tools/trace/trace.bpf.zig)
+and [Host side](https://github.com/tw4452852/zbpf/blob/main/src/tools/trace/trace.zig).
 
 You could specify the kernel functions you want to trace with: `zig build trace -Dkprobe=<kernel_function_name> -Dkprobe=...`
 And for system calls: `zig build trace -Dsyscall=<syscall_name> -Dsyscall=...`.
