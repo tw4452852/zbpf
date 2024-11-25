@@ -78,6 +78,43 @@ fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?
     return b.addModule("vmlinux", .{ .root_source_file = zigify.getOutput() });
 }
 
+fn create_btf_translator(b: *std.Build, libbpf: *std.Build.Step.Compile) *std.Build.Step.Compile {
+    // build for native
+    const target = b.host;
+    const optimize: std.builtin.OptimizeMode = .ReleaseFast;
+
+    const exe = b.addExecutable(.{
+        .name = "btf_translator",
+        .root_source_file = b.path("src/btf_translator/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    exe.linkLibrary(libbpf);
+    exe.linkLibC();
+    b.installArtifact(exe);
+
+    return exe;
+}
+
+fn create_btf_translator_test(b: *std.Build, libbpf: *std.Build.Step.Compile, filter: ?[]const u8) *std.Build.Step.Compile {
+    // build for native
+    const target = b.host;
+    const optimize: std.builtin.OptimizeMode = .Debug;
+
+    const exe = b.addTest(.{
+        .root_source_file = b.path("src/btf_translator/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .filter = filter,
+    });
+
+    exe.linkLibrary(libbpf);
+    exe.linkLibC();
+
+    return exe;
+}
+
 fn create_btf_sanitizer(b: *std.Build, libbpf: *std.Build.Step.Compile, libelf: *std.Build.Step.Compile) *std.Build.Step.Compile {
     // build for native
     const target = b.host;
@@ -330,9 +367,27 @@ fn create_test_step(ctx: *const Ctx) !void {
     run_trace_script.expectExitCode(0);
     run_trace_script.has_side_effects = true;
 
+    // run btf_translator test
+    const btf_translator_test = create_btf_translator_test(ctx.b, ctx.libbpf_step, filter);
+    const run_btf_translator_test = ctx.b.addRunArtifact(btf_translator_test);
+    const test_btf_translator_step = ctx.b.step("test-btf-translator", "Build and run btf_translator unit tests");
+    test_btf_translator_step.dependOn(&run_btf_translator_test.step);
+
+    // build vmlinux test
+    const vmlinux_test = ctx.b.addTest(.{
+        .root_source_file = ctx.b.path("src/tests/vmlinux.zig"),
+        .target = ctx.target,
+        .optimize = ctx.optimize,
+    });
+    vmlinux_test.root_module.addImport("vmlinux", ctx.vmlinux);
+    const test_vmlinux_step = ctx.b.step("test-vmlinux", "Build vmlinux unit test");
+    test_vmlinux_step.dependOn(&vmlinux_test.step);
+
     const test_step = ctx.b.step("test", "Build and run all unit tests");
     test_step.dependOn(&run_unit_test.step);
     test_step.dependOn(&run_trace_script.step);
+    test_step.dependOn(test_btf_translator_step);
+    test_step.dependOn(test_vmlinux_step);
 }
 
 fn create_fuzz_test_step(ctx: *const Ctx) !void {
