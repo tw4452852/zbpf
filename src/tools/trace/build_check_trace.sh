@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-zig build trace -Dsyscall=unlinkat:arg1,ret -Dkprobe=do_unlinkat:arg0,arg1,ret -Dkprobe=do_rmdir:arg0,ret,stack
+zig build trace -Dsyscall=unlinkat:arg1,ret -Dkprobe=do_unlinkat:arg0,arg1,arg1.name,ret -Dkprobe=do_rmdir:arg0,ret,stack
 sudo ./zig-out/bin/trace --timeout 2 > ./trace_output.txt &
 sleep 1
 touch test.file
@@ -16,5 +16,7 @@ grep -q "kprobe do_rmdir enter" ./trace_output.txt
 grep -q "kprobe do_rmdir exit" ./trace_output.txt
 grep -q "syscall unlinkat enter" ./trace_output.txt
 grep -q "syscall unlinkat exit" ./trace_output.txt
+grep -q "arg1: test.file" ./trace_output.txt
+grep -q "arg1: test.dir" ./trace_output.txt
 rm -f ./trace_output.txt
 

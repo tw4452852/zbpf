@@ -211,7 +211,7 @@ pub fn PerfEventArray(
         /// `ctx` is the current program context, usually got from program's parameter.
         /// If any error happens, current program will exit immediately.
         pub fn event_output(self: *const Self, ctx: anytype, index: ?u64, data: []const u8) void {
-            const rc = helpers.perf_event_output(ctx, @ptrCast(&@TypeOf(self.map).def), if (index) |i| i else vmlinux.BPF_F_CURRENT_CPU, @constCast(data.ptr), data.len);
+            const rc = helpers.perf_event_output(ctx, @ptrCast(&@TypeOf(self.map).def), if (index) |i| i else 0xffffffff, @constCast(data.ptr), data.len);
             return switch (rc) {
                 0 => {},
                 else => exit(@src(), rc),
@@ -251,8 +251,8 @@ pub fn RingBuffer(
         pub fn event_output(self: *const Self, data: []const u8, notify: RingBufNotify) void {
             const rc = helpers.ringbuf_output(&@TypeOf(self.map).def, @constCast(data.ptr), data.len, switch (notify) {
                 .auto => 0,
-                .force_notify => vmlinux.BPF_RB_FORCE_WAKEUP,
-                .not_notify => vmlinux.BPF_RB_NO_WAKEUP,
+                .force_notify => 2,
+                .not_notify => 1,
             });
             return switch (rc) {
                 0 => {},

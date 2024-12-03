@@ -16,7 +16,7 @@ pub const TRACE_RECORD = extern struct {
 };
 
 inline fn is_string(T: type) bool {
-    return T == [*c]const u8;
+    return T == *u8;
 }
 const String = [64]u8;
 
@@ -55,6 +55,7 @@ pub fn Arg(comptime name: []const u8, comptime is_syscall: bool) type {
             comptime var it = std.mem.tokenizeScalar(u8, specifier[0..if (slash) |si| si else specifier.len], '.');
             const argN = comptime it.next().?;
             comptime var FT: type = @TypeOf(@field(F.Ctx(), argN)(@ptrFromInt(1)));
+
             if (is_string(FT)) return String;
 
             var ti = @typeInfo(FT);
@@ -64,12 +65,12 @@ pub fn Arg(comptime name: []const u8, comptime is_syscall: bool) type {
                     ti = @typeInfo(FT);
                 }
 
-                if (ti == .Pointer) {
-                    FT = ti.Pointer.child;
+                if (ti == .pointer) {
+                    FT = ti.pointer.child;
                     ti = @typeInfo(FT);
                 }
-                if (ti == .Struct) {
-                    inline for (ti.Struct.fields) |field| {
+                if (ti == .@"struct") {
+                    inline for (ti.@"struct".fields) |field| {
                         if (std.mem.eql(u8, field.name, field_name)) {
                             FT = field.type;
                             ti = @typeInfo(FT);
@@ -80,11 +81,10 @@ pub fn Arg(comptime name: []const u8, comptime is_syscall: bool) type {
 
                 if (is_string(FT)) return String;
             }
-            return switch (ti) {
-                .pointer => |info| info.child,
-                .optional => |info| info.child,
-                else => FT,
-            };
+            return if (bpf.Args.is_pointer(FT))
+                bpf.Args.deref_pointer(FT)
+            else
+                FT;
         }
 
         pub fn placeholder(comptime specifier: []const u8) []const u8 {
@@ -108,6 +108,7 @@ pub fn Arg(comptime name: []const u8, comptime is_syscall: bool) type {
                 const argN = comptime it.next().?;
                 comptime var FT: type = @TypeOf(@field(F.Ctx(), argN)(@ptrFromInt(1)));
                 const arg = @field(F.Ctx(), argN)(@ptrCast(ctx));
+                //@compileLog(specifier, FT, Field(specifier));
                 if (is_string(FT)) {
                     copy_properly(@intFromPtr(dst.*), @intFromPtr(arg), @sizeOf(String), true);
                     dst.* += @sizeOf(Field(specifier));
@@ -118,19 +119,19 @@ pub fn Arg(comptime name: []const u8, comptime is_syscall: bool) type {
                 var src: usize = if (ti == .pointer) @intFromPtr(arg) else @intFromPtr(&arg);
 
                 inline while (comptime it.next()) |field_name| {
-                    if (ti == .pptional) {
+                    if (ti == .optional) {
                         FT = ti.optional.child;
                         ti = @typeInfo(FT);
                     }
                     if (ti == .pointer) {
-                        FT = ti.Pointer.child;
+                        FT = ti.pointer.child;
                         ti = @typeInfo(FT);
                     }
 
                     // find and access field
                     comptime var field_offset: usize = 0;
-                    if (ti != .Struct) @compileError(@typeName(FT) ++ "is not a struct");
-                    inline for (ti.Struct.fields) |field| {
+                    if (ti != .@"struct") @compileError(@typeName(FT) ++ "is not a struct");
+                    inline for (ti.@"struct".fields) |field| {
                         if (comptime std.mem.eql(u8, field.name, field_name)) {
                             field_offset = @offsetOf(FT, field_name);
                             FT = field.type;
@@ -145,7 +146,7 @@ pub fn Arg(comptime name: []const u8, comptime is_syscall: bool) type {
                         return;
                     }
 
-                    if (ti == .Pointer) {
+                    if (ti == .pointer) {
                         var dst_p: usize = undefined;
 
                         copy_properly(@intFromPtr(&dst_p), src + field_offset, @sizeOf(usize), false);

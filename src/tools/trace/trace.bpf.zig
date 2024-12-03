@@ -37,7 +37,7 @@ fn generate(comptime name: []const u8, comptime id: u32, comptime with_stack: bo
 
         fn _entry(ctx: *F.Ctx()) linksection(F.entry_section()) callconv(.C) c_long {
             const tpid = helpers.get_current_pid_tgid();
-            const stack_id = if (with_stack) stackmap.get_current_stack(ctx, vmlinux.BPF_F_REUSE_STACKID) else -1;
+            const stack_id = if (with_stack) stackmap.get_current_stack(ctx, 1024) else -1;
             const resv = events.reserve(extern struct {
                 record: TRACE_RECORD,
                 extra: [entry_extra_size]u8 = undefined,

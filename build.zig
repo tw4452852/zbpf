@@ -50,32 +50,15 @@ fn create_libelf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.
 }
 
 fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?[]const u8) *std.Build.Module {
-    // build for native
-    const target = b.host;
-    const optimize: std.builtin.OptimizeMode = .ReleaseFast;
-
-    const exe = b.addExecutable(.{
-        .name = "vmlinux_dumper",
-        .root_source_file = b.path("src/vmlinux_dumper/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    exe.linkLibrary(libbpf);
-    exe.linkLibC();
-    b.installArtifact(exe);
-
+    const exe = create_btf_translator(b, libbpf);
     const run_exe = b.addRunArtifact(exe);
 
     if (vmlinux_bin) |vmlinux| run_exe.addPrefixedFileArg("-vmlinux", .{ .cwd_relative = vmlinux });
     if (debugging) run_exe.addArg("-debug");
-    const vmlinux_h = run_exe.addPrefixedOutputFileArg("-o", b.fmt("vmlinux.h", .{}));
-    const zigify = b.addTranslateC(.{
-        .root_source_file = vmlinux_h,
-        .target = target,
-        .optimize = optimize,
-    });
-    zigify.addIncludePath(b.path("src/vmlinux_dumper"));
-    return b.addModule("vmlinux", .{ .root_source_file = zigify.getOutput() });
+    run_exe.addArg("-syscalls");
+    const vmlinux_zig = run_exe.addPrefixedOutputFileArg("-o", b.fmt("vmlinux.zig", .{}));
+
+    return b.addModule("vmlinux", .{ .root_source_file = vmlinux_zig });
 }
 
 fn create_btf_translator(b: *std.Build, libbpf: *std.Build.Step.Compile) *std.Build.Step.Compile {

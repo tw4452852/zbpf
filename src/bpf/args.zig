@@ -1,4 +1,6 @@
 const vmlinux = @import("vmlinux");
+const kfuncs = vmlinux.kernel_funcs;
+const ksyscalls = vmlinux.kernel_syscalls;
 const std = @import("std");
 const StructField = std.builtin.Type.StructField;
 const helpers = std.os.linux.BPF.kern.helpers;
@@ -6,15 +8,13 @@ const printErr = @import("root.zig").printErr;
 
 extern var LINUX_HAS_SYSCALL_WRAPPER: bool linksection(".kconfig");
 
-const func_prefix = "_zig_";
-
-const arch: std.Target.Cpu.Arch = if (@hasDecl(vmlinux, func_prefix ++ "__x64_sys_write"))
+const arch: std.Target.Cpu.Arch = if (@hasDecl(kfuncs, "__x64_sys_write"))
     .x86_64
-else if (@hasDecl(vmlinux, func_prefix ++ "__ia32_sys_write"))
+else if (@hasDecl(kfuncs, "__ia32_sys_write"))
     .x86
-else if (@hasDecl(vmlinux, func_prefix ++ "__arm64_sys_write"))
+else if (@hasDecl(kfuncs, "__arm64_sys_write"))
     .aarch64
-else if (@hasDecl(vmlinux, func_prefix ++ "__arm_sys_write"))
+else if (@hasDecl(kfuncs, "__arm_sys_write"))
     .arm
 else
     @compileError(std.fmt.comptimePrint("unknown arch", .{}));
@@ -26,7 +26,7 @@ const in_bpf_program = switch (@import("builtin").cpu.arch) {
 
 /// Return argument context according to the specified kernel function prototype.
 pub fn Ctx(comptime func_name: []const u8) type {
-    const f = @typeInfo(@TypeOf(@field(vmlinux, "_zig_" ++ func_name)));
+    const f = @typeInfo(@typeInfo(@field(kfuncs, func_name)).pointer.child);
     comptime var fields: []const StructField = &.{};
 
     for (0.., f.@"fn".params) |i, arg| {
@@ -62,7 +62,7 @@ pub fn Ctx(comptime func_name: []const u8) type {
 }
 
 /// Represent `struct pt_regs` for different architectures.
-pub const REGS = extern struct {
+pub const REGS = struct {
     const Self = @This();
     impl: switch (arch) {
         .x86, .x86_64, .arm => vmlinux.pt_regs,
@@ -174,7 +174,10 @@ pub fn cast(comptime T: type, rc: c_ulong) T {
 /// As syscall function has different retrieving method than regular kernel function,
 /// this will hide the underlying mechanism to provider a consistent API.
 pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type {
-    const f = @typeInfo(@TypeOf(@field(vmlinux, func_name)));
+    const f = if (for_syscall)
+        @typeInfo(@field(ksyscalls, func_name))
+    else
+        @typeInfo(@typeInfo(@field(kfuncs, func_name)).pointer.child);
 
     return opaque {
         const Self = @This();
@@ -278,11 +281,8 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
 
 /// A Wrapper type for syscall arguments retrieving.
 pub fn SYSCALL(comptime name: []const u8) type {
-    const func_name = "sys_" ++ name;
-    if (!@hasDecl(vmlinux, func_name))
-        @compileError(std.fmt.comptimePrint("can't get function prototype for syscall {s} on {}", .{ name, arch }));
-    const f = @typeInfo(@TypeOf(@field(vmlinux, func_name)));
-    const T = PT_REGS(func_name, true);
+    const f = @typeInfo(@field(ksyscalls, name));
+    const T = PT_REGS(name, true);
 
     return opaque {
         const Self = @This();
