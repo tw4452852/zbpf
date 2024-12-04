@@ -422,9 +422,7 @@ fn create_docs_step(ctx: *const Ctx) !void {
         .optimize = ctx.optimize,
     });
 
-    const dumb_vmlinux = ctx.b.addModule("dumb_vmlinux", .{ .root_source_file = ctx.b.path("src/docs/dummy_vmlinux.zig") });
-    const bpf = create_bpf(ctx.b, dumb_vmlinux);
-    exe.root_module.addImport("bpf", bpf);
+    exe.root_module.addImport("vmlinux", ctx.vmlinux);
 
     const install_docs = ctx.b.addInstallDirectory(.{
         .source_dir = exe.getEmittedDocs(),
