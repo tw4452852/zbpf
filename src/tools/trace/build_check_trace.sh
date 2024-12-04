@@ -2,8 +2,8 @@
 set -e
 
 zig build trace -Dsyscall=unlinkat:arg1,ret -Dkprobe=do_unlinkat:arg0,arg1,arg1.name,ret -Dkprobe=do_rmdir:arg0,ret,stack
-sudo ./zig-out/bin/trace --timeout 2 > ./trace_output.txt &
-sleep 1
+sudo ./zig-out/bin/trace --timeout 2 1>./trace_output.txt 2>&1 &
+until grep -q Tracing ./trace_output.txt; do sleep .1; done
 touch test.file
 mkdir test.dir
 rm -fr test.file test.dir
