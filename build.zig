@@ -151,7 +151,7 @@ const Ctx = struct {
     btf_sanitizer: *std.Build.Step.Compile,
     vmlinux_bin_path: ?[]const u8,
     test_filter: ?[]const u8,
-    fuzzing: bool = false,
+    install: bool,
 };
 
 pub fn build(b: *std.Build) !void {
@@ -161,6 +161,7 @@ pub fn build(b: *std.Build) !void {
     const build_options = b.addOptions();
     const vmlinux_bin = b.option([]const u8, "vmlinux", "vmlinux binary used for BTF generation");
     debugging = if (b.option(bool, "debug", "enable debugging log")) |v| v else false;
+    const install = if (b.option(bool, "install", "alias for -fno-emit-bin, used for testing")) |v| v else true;
 
     const libbpf = create_libbpf(b, target, optimize);
     const vmlinux, const btf_sanitizer = create_native_tools(b, vmlinux_bin);
@@ -177,6 +178,7 @@ pub fn build(b: *std.Build) !void {
         .btf_sanitizer = btf_sanitizer,
         .vmlinux_bin_path = vmlinux_bin,
         .test_filter = b.option([]const u8, "test", "test filter"),
+        .install = install,
     };
 
     try create_main_step(&ctx);
@@ -291,14 +293,14 @@ fn create_target_step(ctx: *const Ctx, main_path: []const u8, prog_path: []const
         exe.linkLibrary(lib);
     };
 
-    // If it's fuzzing build, -fno-emit-bin
-    if (ctx.fuzzing) {
-        const build_step = ctx.b.step(exe_name, "fuzz");
+    const description = ctx.b.fmt("Build {s}", .{exe_name});
+    const build_step = ctx.b.step(exe_name, description);
+
+    if (!ctx.install) {
+        // -fno-emit-bin
         build_step.dependOn(&exe.step);
     } else {
         const install_exe = ctx.b.addInstallArtifact(exe, .{});
-        const description = ctx.b.fmt("Build {s}", .{exe_name});
-        const build_step = ctx.b.step(exe_name, description);
         build_step.dependOn(&install_exe.step);
     }
 }
@@ -373,15 +375,6 @@ fn create_test_step(ctx: *const Ctx) !void {
 }
 
 fn create_fuzz_test_step(ctx: *const Ctx) !void {
-    // Create a dedicated step for building trace with customized vmlinux module
-    var _ctx = ctx.*;
-    _ctx.vmlinux = ctx.b.addModule("_vmlinux", .{
-        .root_source_file = ctx.b.path("src/tests/vmlinux.zig"),
-    });
-    _ctx.bpf = create_bpf(ctx.b, _ctx.vmlinux);
-    _ctx.fuzzing = true;
-    try create_target_step(&_ctx, "src/tools/trace/trace.zig", "src/tools/trace/trace.bpf.zig", "_trace", null);
-
     // Creates a step for fuzzing test.
     const exe_tests = ctx.b.addTest(.{
         .root_source_file = ctx.b.path("src/tests/fuzz.zig"),
@@ -389,8 +382,7 @@ fn create_fuzz_test_step(ctx: *const Ctx) !void {
         .optimize = ctx.optimize,
         .filter = ctx.test_filter,
     });
-    exe_tests.linkLibrary(ctx.libbpf_step);
-    exe_tests.linkLibC();
+    exe_tests.root_module.addImport("vmlinux", ctx.vmlinux);
 
     // As test runner doesn't support passing arguments,
     // we have to create a temporary file for the debugging flag
