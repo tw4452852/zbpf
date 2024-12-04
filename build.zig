@@ -38,7 +38,7 @@ fn create_bpf_prog(ctx: *const Ctx, src_path: []const u8) std.Build.LazyPath {
 fn create_libbpf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
     return b.dependency("libbpf", .{
         .target = target,
-        .optimize = optimize,
+        .optimize = if (optimize != .ReleaseFast) .ReleaseFast else optimize, // WA for pointer alignment assumption of libbpf
     }).artifact("bpf");
 }
 
@@ -156,8 +156,7 @@ const Ctx = struct {
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
-    // WA for pointer alignment assumption of libbpf
-    const optimize: std.builtin.OptimizeMode = .ReleaseFast;
+    const optimize = b.standardOptimizeOption(.{});
 
     const build_options = b.addOptions();
     const vmlinux_bin = b.option([]const u8, "vmlinux", "vmlinux binary used for BTF generation");
