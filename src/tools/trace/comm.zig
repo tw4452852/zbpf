@@ -81,10 +81,15 @@ pub fn Arg(comptime name: []const u8, comptime is_syscall: bool) type {
 
                 if (is_string(FT)) return String;
             }
-            return if (bpf.Args.is_pointer(FT))
-                bpf.Args.deref_pointer(FT)
-            else
-                FT;
+
+            return blk: {
+                // if pointee isn't unknown sized, return pointee, otherwise return pointer itself
+                if (bpf.Args.is_pointer(FT)) {
+                    const pointee = bpf.Args.deref_pointer(FT);
+                    if (@typeInfo(pointee) != .@"opaque") break :blk pointee;
+                }
+                break :blk FT;
+            };
         }
 
         pub fn placeholder(comptime specifier: []const u8) []const u8 {
@@ -108,7 +113,7 @@ pub fn Arg(comptime name: []const u8, comptime is_syscall: bool) type {
                 const argN = comptime it.next().?;
                 comptime var FT: type = @TypeOf(@field(F.Ctx(), argN)(@ptrFromInt(1)));
                 const arg = @field(F.Ctx(), argN)(@ptrCast(ctx));
-                //@compileLog(specifier, FT, Field(specifier));
+
                 if (is_string(FT)) {
                     copy_properly(@intFromPtr(dst.*), @intFromPtr(arg), @sizeOf(String), true);
                     dst.* += @sizeOf(Field(specifier));
