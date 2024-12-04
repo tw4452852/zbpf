@@ -320,7 +320,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                 _ = try ctx.addToken(.equal, "=");
                 const is_neg = signed and if (kind == .enum64) @clz(c.btf_enum64_value(&val64s[vi])) == 0 else @clz(vals[vi].val) == 0;
                 const abs_val: u64 =
-                    if (kind == .enum64 and is_neg) @abs(c.btf_enum64_value(&val64s[vi])) else if (kind == .@"enum" and is_neg) @abs(vals[vi].val) else if (kind == .enum64) c.btf_enum64_value(&val64s[vi]) else @intCast(@as(u32, @bitCast(vals[vi].val)));
+                    if (kind == .enum64 and is_neg) @abs(@as(i64, @bitCast(c.btf_enum64_value(&val64s[vi])))) else if (kind == .@"enum" and is_neg) @abs(vals[vi].val) else if (kind == .enum64) c.btf_enum64_value(&val64s[vi]) else @intCast(@as(u32, @bitCast(vals[vi].val)));
                 const init_tok = if (is_neg) try ctx.addNode(.{
                     .tag = .negation,
                     .main_token = try ctx.addToken(.minus, "-"),
@@ -1089,10 +1089,11 @@ test "enum" {
     assert(c.btf__add_enum_value(btf, "foo_2", 1) == 0);
     assert(c.btf__add_enum_value(btf, "foo_3", 0x80000000) == 0);
     assert(c.btf__add_enum_value(btf, "foo_4", 1) == 0);
-    assert(c.btf__add_enum64(btf, "bar", 8, false) > 0);
+    assert(c.btf__add_enum64(btf, "bar", 8, true) > 0);
     assert(c.btf__add_enum64_value(btf, "bar_1", 2) == 0);
     assert(c.btf__add_enum64_value(btf, "bar_2", 3) == 0);
-    assert(c.btf__add_enum64_value(btf, "bar_3", 0x8000000000000000) == 0);
+    assert(c.btf__add_enum64_value(btf, "bar_3", 0xf0000000) == 0);
+    assert(c.btf__add_enum64_value(btf, "bar_4", @bitCast(@as(i64, -128))) == 0);
 
     const got = try translate(gpa, btf);
     defer gpa.free(got);
@@ -1102,10 +1103,11 @@ test "enum" {
         \\    foo_2 = 1,
         \\    foo_3 = -2147483648,
         \\};
-        \\pub const bar = enum(u64) {
+        \\pub const bar = enum(i64) {
         \\    bar_1 = 2,
         \\    bar_2 = 3,
-        \\    bar_3 = 9223372036854775808,
+        \\    bar_3 = 4026531840,
+        \\    bar_4 = -128,
         \\};
         \\
     ;
