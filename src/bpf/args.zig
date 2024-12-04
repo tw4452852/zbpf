@@ -164,6 +164,7 @@ pub fn cast(comptime T: type, rc: c_ulong) T {
         }
         return @truncate(rc);
     }
+    if (ti == .@"enum") return @enumFromInt(rc);
 
     if (T == bool) return rc == 1;
 
