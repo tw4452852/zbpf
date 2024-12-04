@@ -92,6 +92,16 @@ And here's a quick demo:
 
 [![asciicast](https://asciinema.org/a/675689.svg)](https://asciinema.org/a/675689)
 
+For reference:
+- Syscalls: https://tw4452852.github.io/zbpf/#vmlinux.kernel_syscalls
+- Kernel functions: https://tw4452852.github.io/zbpf/#vmlinux.kernel_funcs
+
+Want to use your local specific linux kernel? No problem, you could set up the documentation locally with:
+```
+zig build docs [-Dvmlinux=/path/your/vmlinux]
+```
+Then browse the generated page which is located at `./zig-out/docs/index.html`.
+
 ## Samples
 
 For each supported feature, we have the corresponding unit test.
