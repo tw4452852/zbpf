@@ -101,6 +101,7 @@ Want to use your local specific linux kernel? No problem, you could set up the d
 zig build docs [-Dvmlinux=/path/your/vmlinux]
 ```
 Then browse the generated page which is located at `./zig-out/docs/index.html`.
+Search for `vmlinux.kernel_syscalls` and `vmlinux.kernel_funcs` for syscalls and kernel functions respectively.
 
 ## Samples
 
