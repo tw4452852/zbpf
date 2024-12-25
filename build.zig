@@ -63,7 +63,7 @@ fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?
 
 fn create_btf_translator(b: *std.Build, libbpf: *std.Build.Step.Compile) *std.Build.Step.Compile {
     // build for native
-    const target = b.host;
+    const target = b.graph.host;
     const optimize: std.builtin.OptimizeMode = .ReleaseFast;
 
     const exe = b.addExecutable(.{
@@ -82,7 +82,7 @@ fn create_btf_translator(b: *std.Build, libbpf: *std.Build.Step.Compile) *std.Bu
 
 fn create_btf_translator_test(b: *std.Build, libbpf: *std.Build.Step.Compile, filter: ?[]const u8) *std.Build.Step.Compile {
     // build for native
-    const target = b.host;
+    const target = b.graph.host;
     const optimize: std.builtin.OptimizeMode = .Debug;
 
     const exe = b.addTest(.{
@@ -100,7 +100,7 @@ fn create_btf_translator_test(b: *std.Build, libbpf: *std.Build.Step.Compile, fi
 
 fn create_btf_sanitizer(b: *std.Build, libbpf: *std.Build.Step.Compile, libelf: *std.Build.Step.Compile) *std.Build.Step.Compile {
     // build for native
-    const target = b.host;
+    const target = b.graph.host;
     const optimize: std.builtin.OptimizeMode = .ReleaseFast;
 
     const exe = b.addExecutable(.{
@@ -121,7 +121,7 @@ fn create_btf_sanitizer(b: *std.Build, libbpf: *std.Build.Step.Compile, libelf: 
 
 fn create_native_tools(b: *std.Build, vmlinux_bin: ?[]const u8) struct { *std.Build.Module, *std.Build.Step.Compile } {
     // build for native
-    const target = b.host;
+    const target = b.graph.host;
     const optimize: std.builtin.OptimizeMode = .ReleaseFast;
 
     const libbpf = create_libbpf(b, target, optimize);
