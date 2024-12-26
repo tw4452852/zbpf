@@ -113,7 +113,7 @@ pub fn main() !void {
 
     var ctx: Ctx = .{
         .stdout = std.io.getStdOut().writer(),
-        .stackmap = libbpf.bpf_object__find_map_by_name(obj, "stackmap").?,
+        .stackmap = libbpf.bpf_object__find_map_by_name(obj, "stackmap"),
         .al = add2line,
         .allocator = allocator,
         .ksyms = ksyms,
@@ -164,7 +164,7 @@ fn setup_ctrl_c() void {
 
 const Ctx = struct {
     stdout: std.fs.File.Writer,
-    stackmap: *libbpf.bpf_map,
+    stackmap: ?*libbpf.bpf_map,
     al: ?Addr2Line,
     ksyms: ?Ksyms,
     allocator: std.mem.Allocator,
