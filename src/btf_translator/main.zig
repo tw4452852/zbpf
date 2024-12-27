@@ -226,10 +226,6 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
         }),
         .ptr => blk: {
             var pointee = t.unnamed_0.type;
-            if (found_loop(chain, pointee)) {
-                pointee = 0;
-            }
-
             var pkind = get_kind(btf, pointee);
             while (pkind == .typedef or pkind == .@"const" or pkind == .@"volatile" or pkind == .restrict) {
                 const pt: *const c.btf_type = c.btf__type_by_id(btf, pointee);
