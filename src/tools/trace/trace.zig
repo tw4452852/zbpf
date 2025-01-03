@@ -20,6 +20,7 @@ const TF = @TypeOf(tracing_funcs[0]);
 
 var exiting = false;
 var debug = false;
+var testing = false;
 
 fn dbg_printf(level: libbpf.libbpf_print_level, fmt: [*c]const u8, args: @typeInfo(@typeInfo(@typeInfo(libbpf.libbpf_print_fn_t).optional.child).pointer.child).@"fn".params[2].type.?) callconv(.C) c_int {
     if (!debug and level == libbpf.LIBBPF_DEBUG) return 0;
@@ -33,6 +34,7 @@ fn usage() void {
         \\ --timeout [seconds]
         \\ --help
         \\ --debug
+        \\ --testing
         \\ --vmlinux [/path/to/vmlinux]
     ++ "\n", .{});
 }
@@ -41,6 +43,14 @@ fn nextArg(args: []const []const u8, idx: *usize) ?[]const u8 {
     if (idx.* >= args.len) return null;
     defer idx.* += 1;
     return args[idx.*];
+}
+
+// Just for testing
+export fn testing_call(a: u32, b: u32) u32 {
+    return testing_call_nest(a, b);
+}
+export fn testing_call_nest(a: u32, b: u32) u32 {
+    return a + b;
 }
 
 pub fn main() !void {
@@ -69,6 +79,8 @@ pub fn main() !void {
             return;
         } else if (std.mem.eql(u8, arg, "--debug")) {
             debug = true;
+        } else if (std.mem.eql(u8, arg, "--testing")) {
+            testing = true;
         } else if (std.mem.eql(u8, arg, "--vmlinux")) {
             vmlinux_path = nextArg(args, &arg_idx) orelse {
                 usage();
@@ -134,6 +146,9 @@ pub fn main() !void {
 
     setup_ctrl_c();
     print("Tracing...\n", .{});
+    if (testing) {
+        _ = testing_call(1, 2);
+    }
     const begin_ts = std.time.timestamp();
     while (!exiting) {
         ret = libbpf.ring_buffer__poll(ring_buf, 100);
@@ -223,12 +238,12 @@ fn Args(comptime tf: TF) type {
         ) void {
             const pid: u32 = @truncate(record.tpid);
 
-            writer.print("pid: {}, {s} {s} {s}:\n", .{ pid, if (tf.kind == .kprobe) "kprobe" else "syscall", tf.name, if (record.entry) "enter" else "exit" }) catch {};
+            writer.print("pid: {}, {s} {s} {s}:\n", .{ pid, @tagName(tf.kind), tf.name, if (record.entry) "enter" else "exit" }) catch {};
             var extra: usize = @intFromPtr(record) + @sizeOf(TRACE_RECORD);
             if (record.entry) {
                 inline for (tf.args) |spec| {
                     if (comptime std.mem.startsWith(u8, spec, "arg")) {
-                        const Arg = comm.Arg(tf.name, tf.kind == .syscall);
+                        const Arg = comm.Arg(tf.name, tf.kind);
                         const T = Arg.Field(spec);
                         const placeholder = comptime Arg.placeholder(spec);
                         const is_string = comptime std.mem.eql(u8, placeholder, "{s}");
@@ -240,7 +255,7 @@ fn Args(comptime tf: TF) type {
             } else {
                 inline for (tf.args) |spec| {
                     if (comptime std.mem.startsWith(u8, spec, "ret")) {
-                        const Arg = comm.Arg(tf.name, tf.kind == .syscall);
+                        const Arg = comm.Arg(tf.name, tf.kind);
                         const T = Arg.Field(spec);
                         const placeholder = comptime Arg.placeholder(spec);
                         const is_string = comptime std.mem.eql(u8, placeholder, "{s}");

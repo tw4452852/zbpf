@@ -71,16 +71,17 @@ for you reference.
 
 ## Tools/trace
 
-`trace` is a tool built on top of `zbpf` framework to trace kernel functions and syscalls.
+`trace` is a tool built on top of `zbpf` framework to trace kernel functions, syscalls and userspace functions.
 It's heavily inspired by [retsnoop](https://github.com/anakryiko/retsnoop).
 One improvement I made (which is also what I feel when using retsnoop) is that `trace` support
 show parameters according its type (thanks to the Zig type system).
-This is very helpful when debugging linux kernel.
+This is very helpful when debugging linux kernel and userspace program.
 For more details, you could check the implementation: [BPF side](https://github.com/tw4452852/zbpf/blob/main/src/tools/trace/trace.bpf.zig)
 and [Host side](https://github.com/tw4452852/zbpf/blob/main/src/tools/trace/trace.zig).
 
 You could specify the kernel functions you want to trace with: `zig build trace -Dkprobe=<kernel_function_name> -Dkprobe=...`
 And for system calls: `zig build trace -Dsyscall=<syscall_name> -Dsyscall=...`.
+Or userspace function: `zig build trace -Duprobe=/path/to/binary[function_name]`.
 Moreover, if you also want to capture the function's arguments, append the argument specifier, something like this:
 `-Dkprobe=<kernel_function_name>:arg0,arg1...`, it also supports access to the deeper field if the argument is a pointer to a struct:
 `-Dkprobe=<kernel_function_name>:arg0.field1.field0`.

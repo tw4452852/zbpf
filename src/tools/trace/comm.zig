@@ -1,6 +1,7 @@
 const std = @import("std");
 const bpf = @import("bpf");
 const helpers = std.os.linux.BPF.kern.helpers;
+const build_options = @import("@build_options");
 
 const in_bpf_program = switch (@import("builtin").cpu.arch) {
     .bpfel, .bpfeb => true,
@@ -45,8 +46,20 @@ inline fn copy_properly(dst: usize, src: usize, comptime size: usize, comptime i
 /// .field_name: field name in the current structure, any number of nest is possible.
 /// /format_placeholder: All zig's fmt placeholders are allowed,
 /// if not specified, {s} will be used for string, {any} for others.
-pub fn Arg(comptime name: []const u8, comptime is_syscall: bool) type {
-    const F = if (is_syscall) bpf.Ksyscall{ .name = name } else bpf.Kprobe{ .name = name };
+pub fn Arg(comptime name: []const u8, comptime kind: build_options.Kind) type {
+    const F = switch (kind) {
+        .syscall => bpf.Ksyscall{ .name = name },
+        .kprobe => bpf.Kprobe{ .name = name },
+        .uprobe => blk: {
+            var it = std.mem.tokenizeAny(u8, name, "[]");
+            const path = it.next().?;
+            const s = it.next().?;
+            if (std.mem.indexOfScalar(u8, s, '+')) |i| {
+                const offset = std.fmt.parseInt(u64, s[i + 1 ..], 0) catch @panic("invalid offset");
+                break :blk bpf.Uprobe{ .name = path, .func = s[0..i], .offset = offset };
+            } else break :blk bpf.Uprobe{ .name = path, .func = s };
+        },
+    };
 
     return struct {
         pub fn Field(comptime specifier: []const u8) type {

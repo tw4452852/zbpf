@@ -45,7 +45,7 @@ fn create_libbpf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.
 fn create_libelf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
     return b.dependency("libelf", .{
         .target = target,
-        .optimize = optimize,
+        .optimize = if (optimize != .ReleaseFast) .ReleaseFast else optimize, // WA for pointer alignment assumption of libelf
     }).artifact("elf");
 }
 
@@ -179,13 +179,15 @@ fn create_main_step(ctx: *const Ctx) !void {
 fn create_trace_step(ctx: *const Ctx) !void {
     const kprobes = if (ctx.b.option([]const []const u8, "kprobe", "trace the specified kernel function")) |v| v else &.{};
     const syscalls = if (ctx.b.option([]const []const u8, "syscall", "trace the specified syscall")) |v| v else &.{};
+    const uprobes = if (ctx.b.option([]const []const u8, "uprobe", "trace the specified userspace function")) |v| v else &.{};
 
     var content = std.ArrayList(u8).init(ctx.b.allocator);
     defer content.deinit();
     const w = content.writer();
     try w.writeAll(
+        \\pub const Kind = enum { kprobe, syscall, uprobe };
         \\const TraceFunc = struct {
-        \\  kind: enum { kprobe, syscall },
+        \\  kind: Kind,
         \\  name: []const u8,
         \\  args: []const []const u8,
         \\  with_stack: bool,
@@ -193,52 +195,37 @@ fn create_trace_step(ctx: *const Ctx) !void {
         \\pub const tracing_funcs = [_]TraceFunc{
         \\
     );
-    for (kprobes) |l| {
-        const colon = std.mem.indexOfScalar(u8, l, ':');
-        const name = if (colon) |ci| l[0..ci] else l;
-        try w.print(".{{ .kind = .kprobe, .name = \"{s}\", ", .{name});
 
-        var with_stack = false;
-        if (colon) |ci| {
-            var it = std.mem.tokenizeScalar(u8, l[ci + 1 ..], ',');
-            try w.writeAll(".args = &.{");
-            while (it.next()) |arg| {
-                if (std.mem.eql(u8, arg, "stack")) {
-                    with_stack = true;
-                } else {
-                    try w.print("\"{s}\", ", .{arg});
+    const Closure = struct {
+        fn generate_one(writer: std.ArrayList(u8).Writer, kind: []const u8, l: []const u8) !void {
+            const colon = std.mem.indexOfScalar(u8, l, ':');
+            const name = if (colon) |ci| l[0..ci] else l;
+            try writer.print(".{{ .kind = .{s}, .name = \"{s}\", ", .{ kind, name });
+
+            var with_stack = false;
+            if (colon) |ci| {
+                var it = std.mem.tokenizeScalar(u8, l[ci + 1 ..], ',');
+                try writer.writeAll(".args = &.{");
+                while (it.next()) |arg| {
+                    if (std.mem.eql(u8, arg, "stack")) {
+                        with_stack = true;
+                    } else {
+                        try writer.print("\"{s}\", ", .{arg});
+                    }
                 }
+                try writer.writeAll("}, ");
+            } else {
+                try writer.writeAll(".args = &.{}, ");
             }
-            try w.writeAll("}, ");
-        } else {
-            try w.writeAll(".args = &.{}, ");
+
+            try writer.print(".with_stack = {}, }},\n", .{with_stack});
         }
+    };
 
-        try w.print(".with_stack = {}, }},\n", .{with_stack});
-    }
-    for (syscalls) |l| {
-        const colon = std.mem.indexOfScalar(u8, l, ':');
-        const name = if (colon) |ci| l[0..ci] else l;
-        try w.print(".{{ .kind = .syscall, .name = \"{s}\", ", .{name});
+    for (kprobes) |l| try Closure.generate_one(w, "kprobe", l);
+    for (syscalls) |l| try Closure.generate_one(w, "syscall", l);
+    for (uprobes) |l| try Closure.generate_one(w, "uprobe", l);
 
-        var with_stack = false;
-        if (colon) |ci| {
-            var it = std.mem.tokenizeScalar(u8, l[ci + 1 ..], ',');
-            try w.writeAll(".args = &.{");
-            while (it.next()) |arg| {
-                if (std.mem.eql(u8, arg, "stack")) {
-                    with_stack = true;
-                } else {
-                    try w.print("\"{s}\", ", .{arg});
-                }
-            }
-            try w.writeAll("}, ");
-        } else {
-            try w.writeAll(".args = &.{}, ");
-        }
-
-        try w.print(".with_stack = {}, }},\n", .{with_stack});
-    }
     try w.writeAll("};");
     const f = ctx.b.addWriteFiles().add(
         "generated_tracing_ctx.zig",
@@ -332,6 +319,8 @@ fn create_test_step(ctx: *const Ctx) !void {
     const run_trace_script = ctx.b.addSystemCommand(&.{ "sh", "src/tools/trace/build_check_trace.sh" });
     run_trace_script.expectExitCode(0);
     run_trace_script.has_side_effects = true;
+    const test_tool_trace_step = ctx.b.step("test-tool-trace", "Build and run tool/trace unit tests");
+    test_tool_trace_step.dependOn(&run_trace_script.step);
 
     // run btf_translator test
     const btf_translator_test = create_btf_translator_test(ctx);
@@ -351,7 +340,7 @@ fn create_test_step(ctx: *const Ctx) !void {
 
     const test_step = ctx.b.step("test", "Build and run all unit tests");
     test_step.dependOn(&run_unit_test.step);
-    test_step.dependOn(&run_trace_script.step);
+    test_step.dependOn(test_tool_trace_step);
     test_step.dependOn(test_btf_translator_step);
     test_step.dependOn(test_vmlinux_step);
 }

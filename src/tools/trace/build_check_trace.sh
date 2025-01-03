@@ -1,8 +1,13 @@
 #!/bin/bash
 set -e
 
-zig build trace -Dsyscall=unlinkat:arg1,ret -Dkprobe=do_unlinkat:arg0,arg1,arg1.name,ret -Dkprobe=do_rmdir:arg0,ret,stack
-sudo ./zig-out/bin/trace --timeout 2 1>./trace_output.txt 2>&1 &
+zig build trace \
+  -Dsyscall=unlinkat:arg1,ret \
+  -Dkprobe=do_unlinkat:arg0,arg1,arg1.name,ret \
+  -Dkprobe=do_rmdir:arg0,ret,stack \
+  -Duprobe=/proc/self/exe[testing_call+0]:arg0,arg1,ret,stack
+
+sudo ./zig-out/bin/trace --timeout 2 --testing >./trace_output.txt 2>&1 &
 until grep -q Tracing ./trace_output.txt; do sleep .1; done
 touch test.file
 mkdir test.dir
@@ -18,5 +23,11 @@ grep -q "syscall unlinkat enter" ./trace_output.txt
 grep -q "syscall unlinkat exit" ./trace_output.txt
 grep -q "arg1: test.file" ./trace_output.txt
 grep -q "arg1: test.dir" ./trace_output.txt
+grep -qF "uprobe /proc/self/exe[testing_call+0] enter" ./trace_output.txt
+grep -qF "uprobe /proc/self/exe[testing_call+0] exit" ./trace_output.txt
+grep -q "arg0: 1" ./trace_output.txt
+grep -q "arg1: 2" ./trace_output.txt
+grep -q "ret: 3" ./trace_output.txt
+
 rm -f ./trace_output.txt
 
