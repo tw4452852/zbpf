@@ -65,4 +65,5 @@ test {
     _ = @import("xdp_ping.zig");
     _ = @import("kfunc.zig");
     _ = @import("stacktrace.zig");
+    _ = @import("uprobe.zig");
 }

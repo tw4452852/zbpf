@@ -14,6 +14,8 @@ pub const Ksyscall = @import("ksyscall.zig");
 pub const Args = @import("args.zig");
 /// Represent XDP in bpf program.
 pub const Xdp = @import("xdp.zig");
+/// Represent Uprobe in bpf program.
+pub const Uprobe = @import("uprobe.zig");
 
 const std = @import("std");
 const trace_printk = std.os.linux.BPF.kern.helpers.trace_printk;

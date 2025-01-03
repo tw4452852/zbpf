@@ -1,6 +1,5 @@
 const std = @import("std");
 const Args = @import("args.zig");
-const vmlinux = @import("vmlinux");
 
 /// Kernel function name.
 name: []const u8,

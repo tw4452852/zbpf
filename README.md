@@ -126,5 +126,6 @@ kmulprobe | [source](samples/kmulprobe.zig) | [source](src/tests/kmulprobe.zig)
 xdp ping | [source](samples/xdp_ping.zig) | [source](src/tests/xdp_ping.zig)
 kfunc | [source](samples/kfunc.zig) | [source](src/tests/kfunc.zig)
 stack_trace | [source](samples/stacktrace.zig) | [source](src/tests/stacktrace.zig)
+uprobe | [source](samples/uprobe.zig) | [source](src/tests/uprobe.zig)
 
 **Have fun!**
