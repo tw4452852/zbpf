@@ -6,9 +6,12 @@ const libbpf = @cImport({
 const libelf = @cImport({
     @cInclude("libelf.h");
 });
+const perf_event = @cImport({
+    @cInclude("linux/perf_event.h");
+});
+const vmlinux = @import("vmlinux");
 const comm = @import("comm.zig");
 const bpf = @import("bpf");
-const vmlinux = @import("vmlinux");
 const TRACE_RECORD = comm.TRACE_RECORD;
 const STACK_TRACE = bpf.Map.STACK_TRACE;
 const is_pointer = bpf.Args.is_pointer;
@@ -16,7 +19,7 @@ const cast = bpf.Args.cast;
 const process = std.process;
 
 const tracing_funcs = @import("@build_options").tracing_funcs;
-const TF = @TypeOf(tracing_funcs[0]);
+const TraceFunc = @import("@build_options").TraceFunc;
 
 var exiting = false;
 var debug = false;
@@ -35,6 +38,7 @@ fn usage() void {
         \\ --help
         \\ --debug
         \\ --testing
+        \\ --lbr
         \\ --vmlinux [/path/to/vmlinux]
     ++ "\n", .{});
 }
@@ -117,18 +121,21 @@ pub fn main() !void {
     }
 
     var ksyms = Ksyms.init(allocator) catch null;
-    defer if (ksyms) |*ks| ks.deinit();
+    defer if (ksyms) |*ks| ks.deinit(allocator);
+
+    var lbr_opt = LBR.init(allocator) catch null;
+    defer if (lbr_opt) |*lbr| lbr.deinit();
 
     const stext_runtime: ?u64 = if (ksyms) |*ks| ks.stext_addr else null;
-    var add2line = if (vmlinux_path) |p| Addr2Line.init(allocator, p, stext_runtime) catch null else null;
-    defer if (add2line) |*al| al.deinit();
+    var add2line_opt = if (vmlinux_path) |p| Addr2Line.init(allocator, p, stext_runtime) catch null else null;
+    defer if (add2line_opt) |*al| al.deinit();
 
     var ctx: Ctx = .{
         .stdout = std.io.getStdOut().writer(),
         .stackmap = libbpf.bpf_object__find_map_by_name(obj, "stackmap"),
-        .al = add2line,
+        .al = if (add2line_opt) |*al| al else null,
+        .ksyms = if (ksyms) |*ks| ks else null,
         .allocator = allocator,
-        .ksyms = ksyms,
     };
     // setup events ring buffer
     const events = libbpf.bpf_object__find_map_by_name(obj, "events").?;
@@ -180,8 +187,8 @@ fn setup_ctrl_c() void {
 const Ctx = struct {
     stdout: std.fs.File.Writer,
     stackmap: ?*libbpf.bpf_map,
-    al: ?Addr2Line,
-    ksyms: ?Ksyms,
+    al: ?*Addr2Line,
+    ksyms: ?*const Ksyms,
     allocator: std.mem.Allocator,
 };
 
@@ -200,26 +207,34 @@ fn on_sample(_ctx: ?*anyopaque, data: ?*anyopaque, _: usize) callconv(.C) c_int 
                     return -1;
                 }
 
-                ctx.stdout.print("stack:\n", .{}) catch return -1;
+                ctx.stdout.writeAll("Stack:\n") catch return -1;
                 for (entries) |entry| {
                     if (entry == 0) break;
 
                     ctx.stdout.print("0x{x}", .{entry}) catch return -1;
-                    if (ctx.ksyms) |*ksyms| {
-                        if (ksyms.find(entry)) |sym| {
+                    if (ctx.ksyms) |ks| {
+                        if (ks.find(entry)) |sym| {
                             ctx.stdout.print(" {s}", .{sym.name}) catch return -1;
                             if (entry > sym.addr) {
                                 ctx.stdout.print("+0x{x}", .{entry - sym.addr}) catch return -1;
                             }
                         }
                     }
-                    if (ctx.al) |*al| {
+                    if (ctx.al) |al| {
                         if (al.find(entry)) |l| {
                             ctx.stdout.print(" {s}:{d}:{d}", .{ l.file_name, l.line, l.column }) catch return -1;
                             ctx.allocator.free(l.file_name);
                         }
                     }
                     ctx.stdout.print("\n", .{}) catch return -1;
+                }
+            }
+
+            if (record.lbr_size > 0) {
+                const lbrs: [*]align(1) vmlinux.perf_branch_entry = @ptrFromInt(@intFromPtr(record) + @sizeOf(TRACE_RECORD) + record.arg_size);
+                ctx.stdout.writeAll("LBRs:\n") catch return -1;
+                for (0..@divExact(@as(usize, @intCast(record.lbr_size)), @sizeOf(vmlinux.perf_branch_entry))) |idx| {
+                    ctx.stdout.print("{}: 0x{x} -> 0x{x}\n", .{ idx, lbrs[idx].from, lbrs[idx].to }) catch return -1;
                 }
             }
         },
@@ -230,7 +245,7 @@ fn on_sample(_ctx: ?*anyopaque, data: ?*anyopaque, _: usize) callconv(.C) c_int 
     return 0;
 }
 
-fn Args(comptime tf: TF) type {
+fn Args(comptime tf: TraceFunc) type {
     return struct {
         pub fn print(
             record: *const TRACE_RECORD,
@@ -270,18 +285,15 @@ fn Args(comptime tf: TF) type {
 }
 
 const Ksyms = struct {
-    const Self = @This();
-
     pub const Entry = struct {
         addr: u64,
         name: []const u8,
     };
 
-    allocator: std.mem.Allocator,
     syms: []Entry, // in address asending order
     stext_addr: u64,
 
-    pub fn init(allocator: std.mem.Allocator) !Self {
+    pub fn init(allocator: std.mem.Allocator) !Ksyms {
         const f = try std.fs.openFileAbsolute("/proc/kallsyms", .{});
         defer f.close();
         var br = std.io.bufferedReader(f.reader());
@@ -300,7 +312,6 @@ const Ksyms = struct {
         }
 
         return .{
-            .allocator = allocator,
             .syms = try entries.toOwnedSlice(),
             .stext_addr = stext.?,
         };
@@ -310,7 +321,7 @@ const Ksyms = struct {
         return std.math.order(entry.addr, addr);
     }
 
-    pub fn find(self: *const Self, addr: u64) ?Entry {
+    pub fn find(self: *const Ksyms, addr: u64) ?Entry {
         const i = std.sort.lowerBound(Entry, self.syms, addr, compareAddr);
         if (i == self.syms.len) return null;
 
@@ -320,8 +331,8 @@ const Ksyms = struct {
         } else return self.syms[i];
     }
 
-    pub fn deinit(self: *Self) void {
-        self.allocator.free(self.syms);
+    pub fn deinit(self: *Ksyms, allocator: std.mem.Allocator) void {
+        allocator.free(self.syms);
         self.* = undefined;
     }
 };
@@ -378,6 +389,36 @@ const Addr2Line = struct {
 
     pub fn deinit(self: *Self) void {
         self.module.deinit(self.allocator);
+        self.* = undefined;
+    }
+};
+
+const LBR = struct {
+    fds: []std.posix.fd_t,
+    allocator: std.mem.Allocator,
+
+    pub fn init(allocator: std.mem.Allocator) !LBR {
+        const num_cpus = libbpf.libbpf_num_possible_cpus();
+        const fds = try allocator.alloc(std.posix.fd_t, @intCast(num_cpus));
+        errdefer allocator.free(fds);
+        for (fds, 0..) |*fd, cpu| {
+            var attr: std.posix.system.perf_event_attr = .{
+                .type = .HARDWARE,
+                .sample_type = perf_event.PERF_SAMPLE_BRANCH_STACK,
+                .branch_sample_type = perf_event.PERF_SAMPLE_BRANCH_USER | perf_event.PERF_SAMPLE_BRANCH_CALL,
+            };
+            fd.* = try std.posix.perf_event_open(&attr, -1, @intCast(cpu), -1, 0);
+            errdefer std.posix.close(fd.*);
+        }
+        return .{
+            .fds = fds,
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: *LBR) void {
+        for (self.fds) |fd| std.posix.close(fd);
+        self.allocator.free(self.fds);
         self.* = undefined;
     }
 };

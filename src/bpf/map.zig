@@ -260,19 +260,23 @@ pub fn RingBuffer(
             };
         }
 
-        /// Reserve a space of type `T` in the ring buffer.
+        /// Reserve a space with header type `T`and `trailing_size` bytes of trailing in the ring buffer.
         /// If any error happens, current program will exit immediately.
-        pub fn reserve(self: *const Self, comptime T: type) struct {
-            /// Pointer to the allocated space.
-            data_ptr: *T,
+        pub fn reserve(self: *const Self, comptime T: type, comptime trailing_size: usize) struct {
+            /// Pointer to the allocated header space.
+            header_ptr: *T,
 
-            /// Submit reserved ring buffer sample, pointed to by `data_ptr`.
+            /// Pointer to the allocated trailing space.
+            trail_ptr: [*c]u8,
+
+            /// Submit reserved ring buffer sample, pointed to by `header_ptr`.
             pub fn commit(s: *const @This()) void {
-                helpers.ringbuf_submit(s.data_ptr, 0);
+                helpers.ringbuf_submit(s.header_ptr, 0);
             }
         } {
-            if (helpers.ringbuf_reserve(&@TypeOf(self.map).def, @sizeOf(T), 0)) |ptr| return .{
-                .data_ptr = @alignCast(@ptrCast(ptr)),
+            if (helpers.ringbuf_reserve(&@TypeOf(self.map).def, @sizeOf(T) + trailing_size, 0)) |ptr| return .{
+                .header_ptr = @alignCast(@ptrCast(ptr)),
+                .trail_ptr = @ptrFromInt(@intFromPtr(ptr) + @sizeOf(T)),
             } else exit(@src(), @as(c_long, -1));
         }
     };

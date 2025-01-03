@@ -19,9 +19,9 @@ export fn test_kmulprobe(regs: *REGS) linksection("kprobe.multi") callconv(.C) c
 export fn test_kmulretprobe(regs: *REGS) linksection("kretprobe.multi") callconv(.C) c_long {
     const tpid = helpers.get_current_pid_tgid();
     if (buffer.lookup(tpid)) |v| {
-        const resv = events.reserve(REGS);
-        resv.data_ptr.* = v.*;
-        resv.data_ptr.ret_ptr().* = regs.ret_ptr().*;
+        const resv = events.reserve(REGS, 0);
+        resv.header_ptr.* = v.*;
+        resv.header_ptr.ret_ptr().* = regs.ret_ptr().*;
         resv.commit();
     } else {
         const fmt = "exit failed\n";

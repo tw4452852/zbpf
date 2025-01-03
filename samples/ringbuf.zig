@@ -18,8 +18,8 @@ export fn test_ringbuf() linksection("kprobe/do_nanosleep") c_int {
         if (n % 2 == 1) {
             events.event_output(std.mem.asBytes(&a), @enumFromInt(n % 3));
         } else {
-            const resv = events.reserve(@TypeOf(a));
-            resv.data_ptr.* = a;
+            const resv = events.reserve(@TypeOf(a), 0);
+            resv.header_ptr.* = a;
             resv.commit();
         }
 

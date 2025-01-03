@@ -11,13 +11,13 @@ const build_options = @import("@build_options");
 var events = bpf.Map.RingBuffer("events", 16, 0).init();
 var stackmap = bpf.Map.StackTraceMap("stackmap", 16384).init();
 
-fn generate(comptime name: []const u8, comptime id: u32, comptime with_stack: bool, comptime args_capture: []const []const u8, comptime kind: build_options.Kind) type {
+fn generate(comptime id: u32, comptime tf: build_options.TraceFunc) type {
     return struct {
-        const F = switch (kind) {
-            .syscall => bpf.Ksyscall{ .name = name },
-            .kprobe => bpf.Kprobe{ .name = name },
+        const F = switch (tf.kind) {
+            .syscall => bpf.Ksyscall{ .name = tf.name },
+            .kprobe => bpf.Kprobe{ .name = tf.name },
             .uprobe => blk: {
-                var it = std.mem.tokenizeAny(u8, name, "[]");
+                var it = std.mem.tokenizeAny(u8, tf.name, "[]");
                 const path = it.next().?;
                 const s = it.next().?;
                 if (std.mem.indexOfScalar(u8, s, '+')) |i| {
@@ -26,15 +26,15 @@ fn generate(comptime name: []const u8, comptime id: u32, comptime with_stack: bo
                 } else break :blk bpf.Uprobe{ .name = path, .func = s };
             },
         };
-        const identifier = switch (kind) {
-            .syscall, .kprobe => name,
+        const identifier = switch (tf.kind) {
+            .syscall, .kprobe => tf.name,
             .uprobe => F.func,
         };
 
-        const Arg = comm.Arg(name, kind);
+        const Arg = comm.Arg(tf.name, tf.kind);
         const entry_extra_size = es: {
             var size = 0;
-            for (args_capture) |arg| {
+            for (tf.args) |arg| {
                 if (std.mem.startsWith(u8, arg, "arg")) {
                     const FT = Arg.Field(arg);
                     size += @sizeOf(FT);
@@ -44,7 +44,7 @@ fn generate(comptime name: []const u8, comptime id: u32, comptime with_stack: bo
         };
         const exit_extra_size = es: {
             var size = 0;
-            for (args_capture) |arg| {
+            for (tf.args) |arg| {
                 if (std.mem.startsWith(u8, arg, "ret")) {
                     const FT = Arg.Field(arg);
                     size += @sizeOf(FT);
@@ -57,31 +57,34 @@ fn generate(comptime name: []const u8, comptime id: u32, comptime with_stack: bo
             const tpid = helpers.get_current_pid_tgid();
             const BPF_F_REUSE_STACKID = 1 << 10;
             const BPF_F_USER_STACK = 1 << 8;
-            const flags = BPF_F_REUSE_STACKID | if (kind == .uprobe) BPF_F_USER_STACK else 0;
-            const stack_id = if (with_stack) stackmap.get_current_stack(ctx, flags) else -1;
-            const resv = events.reserve(extern struct {
-                record: TRACE_RECORD,
-                extra: [entry_extra_size]u8 = undefined,
-            });
-            resv.data_ptr.* = .{
-                .record = .{
-                    .id = id,
-                    .tpid = tpid,
-                    .entry = true,
-                    .stack_id = stack_id,
-                },
+            const flags = BPF_F_REUSE_STACKID | if (tf.kind == .uprobe) BPF_F_USER_STACK else 0;
+            const stack_id = if (tf.with_stack) stackmap.get_current_stack(ctx, flags) else -1;
+
+            const resv = events.reserve(TRACE_RECORD, entry_extra_size + @sizeOf([64]vmlinux.perf_branch_entry));
+            resv.header_ptr.* = .{
+                .id = id,
+                .tpid = tpid,
+                .entry = true,
+                .stack_id = stack_id,
+                .arg_size = entry_extra_size,
+                .lbr_size = 0,
             };
-            var buf: [*c]u8 = @ptrCast(&resv.data_ptr.extra);
-            inline for (args_capture) |arg| {
+            if (tf.with_lbr) {
+                resv.header_ptr.lbr_size = helpers.get_branch_snapshot(resv.trail_ptr + entry_extra_size, @sizeOf([64]vmlinux.perf_branch_entry), 0);
+            }
+
+            var buf: [*c]u8 = resv.trail_ptr;
+            inline for (tf.args) |arg| {
                 if (comptime std.mem.startsWith(u8, arg, "arg")) Arg.copy(arg, ctx, &buf);
             }
+
             resv.commit();
 
             return 0;
         }
 
         comptime {
-            @export(&_entry, .{ .name = identifier ++ switch (kind) {
+            @export(&_entry, .{ .name = identifier ++ switch (tf.kind) {
                 .syscall => "_syscall_entry",
                 .kprobe => "_kprobe_entry",
                 .uprobe => "_uprobe_entry",
@@ -90,21 +93,18 @@ fn generate(comptime name: []const u8, comptime id: u32, comptime with_stack: bo
 
         fn _exit(ctx: *F.Ctx()) linksection(F.exit_section()) callconv(.C) c_long {
             const tpid = helpers.get_current_pid_tgid();
-            const resv = events.reserve(extern struct {
-                record: TRACE_RECORD,
-                extra: [exit_extra_size]u8 = undefined,
-            });
+            const resv = events.reserve(TRACE_RECORD, exit_extra_size);
 
-            resv.data_ptr.* = .{
-                .record = .{
-                    .id = id,
-                    .tpid = tpid,
-                    .entry = false,
-                    .stack_id = -1,
-                },
+            resv.header_ptr.* = .{
+                .id = id,
+                .tpid = tpid,
+                .entry = false,
+                .stack_id = -1,
+                .arg_size = exit_extra_size,
+                .lbr_size = 0,
             };
-            var buf: [*c]u8 = @ptrCast(&resv.data_ptr.extra);
-            inline for (args_capture) |arg| {
+            var buf: [*c]u8 = resv.trail_ptr;
+            inline for (tf.args) |arg| {
                 if (comptime std.mem.startsWith(u8, arg, "ret")) Arg.copy(arg, ctx, &buf);
             }
             resv.commit();
@@ -113,14 +113,14 @@ fn generate(comptime name: []const u8, comptime id: u32, comptime with_stack: bo
 
         comptime {
             var want_ret = false;
-            for (args_capture) |arg| {
+            for (tf.args) |arg| {
                 if (std.mem.startsWith(u8, arg, "ret")) {
                     want_ret = true;
                     break;
                 }
             }
             if (want_ret) {
-                @export(&_exit, .{ .name = identifier ++ switch (kind) {
+                @export(&_exit, .{ .name = identifier ++ switch (tf.kind) {
                     .syscall => "_syscall_exit",
                     .kprobe => "_kprobe_exit",
                     .uprobe => "_uprobe_exit",
@@ -132,6 +132,6 @@ fn generate(comptime name: []const u8, comptime id: u32, comptime with_stack: bo
 
 comptime {
     for (build_options.tracing_funcs, 0..) |f, i| {
-        _ = generate(f.name, i, f.with_stack, f.args, f.kind);
+        _ = generate(i, f);
     }
 }

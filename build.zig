@@ -186,11 +186,12 @@ fn create_trace_step(ctx: *const Ctx) !void {
     const w = content.writer();
     try w.writeAll(
         \\pub const Kind = enum { kprobe, syscall, uprobe };
-        \\const TraceFunc = struct {
+        \\pub const TraceFunc = struct {
         \\  kind: Kind,
         \\  name: []const u8,
         \\  args: []const []const u8,
         \\  with_stack: bool,
+        \\  with_lbr: bool,
         \\};
         \\pub const tracing_funcs = [_]TraceFunc{
         \\
@@ -203,12 +204,15 @@ fn create_trace_step(ctx: *const Ctx) !void {
             try writer.print(".{{ .kind = .{s}, .name = \"{s}\", ", .{ kind, name });
 
             var with_stack = false;
+            var with_lbr = false;
             if (colon) |ci| {
                 var it = std.mem.tokenizeScalar(u8, l[ci + 1 ..], ',');
                 try writer.writeAll(".args = &.{");
                 while (it.next()) |arg| {
                     if (std.mem.eql(u8, arg, "stack")) {
                         with_stack = true;
+                    } else if (std.mem.eql(u8, arg, "lbr")) {
+                        with_lbr = true;
                     } else {
                         try writer.print("\"{s}\", ", .{arg});
                     }
@@ -218,6 +222,7 @@ fn create_trace_step(ctx: *const Ctx) !void {
                 try writer.writeAll(".args = &.{}, ");
             }
 
+            try writer.print(".with_lbr = {}, ", .{with_lbr});
             try writer.print(".with_stack = {}, }},\n", .{with_stack});
         }
     };
@@ -252,6 +257,7 @@ fn create_target_step(ctx: *const Ctx, main_path: []const u8, prog_path: []const
         .root_source_file = prog,
     });
     exe.root_module.addImport("bpf", ctx.bpf);
+    exe.root_module.addImport("vmlinux", ctx.vmlinux);
     exe.root_module.addAnonymousImport("@build_options", .{
         .root_source_file = ctx.build_options,
     });

@@ -2,7 +2,6 @@ const std = @import("std");
 const bpf = @import("bpf");
 const helpers = std.os.linux.BPF.kern.helpers;
 const build_options = @import("@build_options");
-
 const in_bpf_program = switch (@import("builtin").cpu.arch) {
     .bpfel, .bpfeb => true,
     else => false,
@@ -14,6 +13,8 @@ pub const TRACE_RECORD = extern struct {
     entry: bool,
     tpid: u64,
     stack_id: isize,
+    arg_size: usize,
+    lbr_size: c_long,
 };
 
 inline fn is_string(T: type) bool {
