@@ -80,24 +80,6 @@ fn create_btf_translator(b: *std.Build, libbpf: *std.Build.Step.Compile) *std.Bu
     return exe;
 }
 
-fn create_btf_translator_test(b: *std.Build, libbpf: *std.Build.Step.Compile, filter: ?[]const u8) *std.Build.Step.Compile {
-    // build for native
-    const target = b.graph.host;
-    const optimize: std.builtin.OptimizeMode = .Debug;
-
-    const exe = b.addTest(.{
-        .root_source_file = b.path("src/btf_translator/main.zig"),
-        .target = target,
-        .optimize = optimize,
-        .filter = filter,
-    });
-
-    exe.linkLibrary(libbpf);
-    exe.linkLibC();
-
-    return exe;
-}
-
 fn create_btf_sanitizer(b: *std.Build, libbpf: *std.Build.Step.Compile, libelf: *std.Build.Step.Compile) *std.Build.Step.Compile {
     // build for native
     const target = b.graph.host;
@@ -352,7 +334,7 @@ fn create_test_step(ctx: *const Ctx) !void {
     run_trace_script.has_side_effects = true;
 
     // run btf_translator test
-    const btf_translator_test = create_btf_translator_test(ctx.b, ctx.libbpf_step, filter);
+    const btf_translator_test = create_btf_translator_test(ctx);
     const run_btf_translator_test = ctx.b.addRunArtifact(btf_translator_test);
     const test_btf_translator_step = ctx.b.step("test-btf-translator", "Build and run btf_translator unit tests");
     test_btf_translator_step.dependOn(&run_btf_translator_test.step);
@@ -372,6 +354,20 @@ fn create_test_step(ctx: *const Ctx) !void {
     test_step.dependOn(&run_trace_script.step);
     test_step.dependOn(test_btf_translator_step);
     test_step.dependOn(test_vmlinux_step);
+}
+
+fn create_btf_translator_test(ctx: *const Ctx) *std.Build.Step.Compile {
+    const exe = ctx.b.addTest(.{
+        .root_source_file = ctx.b.path("src/btf_translator/main.zig"),
+        .target = ctx.target,
+        .optimize = ctx.optimize,
+        .filter = ctx.test_filter,
+    });
+
+    exe.linkLibrary(ctx.libbpf_step);
+    exe.linkLibC();
+
+    return exe;
 }
 
 fn create_fuzz_test_step(ctx: *const Ctx) !void {
