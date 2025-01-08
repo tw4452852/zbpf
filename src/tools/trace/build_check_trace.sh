@@ -23,7 +23,7 @@ mkdir test.dir
 rm -fr test.file test.dir
 sleep 1
 
-cat ./trace_output.txt
+cat ./trace_output.txt >&2
 grep -q "kprobe do_unlinkat enter" ./trace_output.txt
 grep -q "kprobe do_unlinkat exit" ./trace_output.txt
 grep -q "kprobe do_rmdir enter" ./trace_output.txt

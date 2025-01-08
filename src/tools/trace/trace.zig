@@ -212,15 +212,17 @@ fn on_sample(_ctx: ?*anyopaque, data: ?*anyopaque, _: usize) callconv(.C) c_int 
                     if (entry == 0) break;
 
                     ctx.stdout.print("0x{x}", .{entry}) catch return -1;
-                    if (ctx.ksyms) |ks| {
-                        if (ks.find(entry)) |sym| {
+                    const syms_opt = if (tracing_funcs[i].kind == .uprobe) null else ctx.ksyms;
+                    if (syms_opt) |syms| {
+                        if (syms.find(entry)) |sym| {
                             ctx.stdout.print(" {s}", .{sym.name}) catch return -1;
                             if (entry > sym.addr) {
                                 ctx.stdout.print("+0x{x}", .{entry - sym.addr}) catch return -1;
                             }
                         }
                     }
-                    if (ctx.al) |al| {
+                    const al_opt = if (tracing_funcs[i].kind == .uprobe) null else ctx.al;
+                    if (al_opt) |al| {
                         if (al.find(entry)) |l| {
                             ctx.stdout.print(" {s}:{d}:{d}", .{ l.file_name, l.line, l.column }) catch return -1;
                             ctx.allocator.free(l.file_name);
@@ -305,11 +307,19 @@ const Ksyms = struct {
         while (try r.readUntilDelimiterOrEofAlloc(allocator, '\n', std.math.maxInt(usize))) |line| {
             var it = std.mem.tokenizeScalar(u8, line, ' ');
             const addr = try std.fmt.parseInt(u64, it.next().?, 16);
-            _ = it.next().?; // type
+            const t = it.next().?; // type
+            if (!std.ascii.eqlIgnoreCase(t, "t")) continue;
             const name = it.next().?;
             try entries.append(.{ .name = name, .addr = addr });
             if (std.mem.eql(u8, name, "_stext")) stext = addr;
         }
+
+        std.mem.sortUnstable(Entry, entries.items, {}, struct {
+            fn lessThan(ctx: void, a: Entry, b: Entry) bool {
+                _ = ctx;
+                return a.addr < b.addr;
+            }
+        }.lessThan);
 
         return .{
             .syms = try entries.toOwnedSlice(),
@@ -318,7 +328,7 @@ const Ksyms = struct {
     }
 
     fn compareAddr(addr: u64, entry: Entry) std.math.Order {
-        return std.math.order(entry.addr, addr);
+        return std.math.order(addr, entry.addr);
     }
 
     pub fn find(self: *const Ksyms, addr: u64) ?Entry {
