@@ -8,7 +8,16 @@ zig build trace \
   -Duprobe=/proc/self/exe[testing_call+0]:arg0,arg1,ret,stack
 
 sudo ./zig-out/bin/trace --timeout 2 --testing >./trace_output.txt 2>&1 &
-until grep -q Tracing ./trace_output.txt; do sleep .1; done
+counter=0
+until grep -q Tracing ./trace_output.txt; do
+  sleep .1;
+  if [ "$counter" == 100 ]; then
+    echo "Timeout!"
+    cat ./trace_output.txt
+    exit 1
+  fi
+  counter=$((counter+1))
+done
 touch test.file
 mkdir test.dir
 rm -fr test.file test.dir
