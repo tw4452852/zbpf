@@ -37,6 +37,7 @@ grep -qF "uprobe /proc/self/exe[testing_call+0] exit" ./trace_output.txt
 grep -q "arg0: 1" ./trace_output.txt
 grep -q "arg1: 2" ./trace_output.txt
 grep -q "ret: 3" ./trace_output.txt
+grep -qF "do_rmdir+0" ./trace_output.txt
 
 rm -f ./trace_output.txt
 
