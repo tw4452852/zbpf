@@ -407,7 +407,9 @@ const LBR = struct {
                 .sample_type = perf_event.PERF_SAMPLE_BRANCH_STACK,
                 .branch_sample_type = perf_event.PERF_SAMPLE_BRANCH_USER | perf_event.PERF_SAMPLE_BRANCH_CALL,
             };
-            fd.* = try std.posix.perf_event_open(&attr, -1, @intCast(cpu), -1, 0);
+            const ret = std.os.linux.perf_event_open(&attr, -1, @intCast(cpu), -1, 0);
+            if (@as(isize, @bitCast(ret)) < 0) return error.PERF_OPEN;
+            fd.* = @intCast(ret);
             errdefer std.posix.close(fd.*);
         }
         return .{

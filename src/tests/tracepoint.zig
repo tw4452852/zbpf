@@ -36,7 +36,7 @@ test "tracepoint" {
 
         // expect map[0] > 1
         const k: u32 = 0;
-        var v: u32 = undefined;
+        var v: u32 = 0;
         ret = libbpf.bpf_map__lookup_elem(map, &k, @sizeOf(@TypeOf(k)), &v, @sizeOf(@TypeOf(v)), 0);
         if (ret != 0) {
             print("failed loopup map element: {}\n", .{std.posix.errno(-1)});
