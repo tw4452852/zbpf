@@ -73,6 +73,7 @@ const Context = struct {
     nodes: std.zig.Ast.NodeList = .{},
     extra_data: std.ArrayListUnmanaged(std.zig.Ast.Node.Index) = .empty,
     tokens: std.zig.Ast.TokenList = .{},
+    fixups: std.zig.Ast.Fixups = .{},
 
     fn addTokenFmt(ctx: *Context, tag: TokenTag, comptime format: []const u8, args: anytype) Allocator.Error!TokenIndex {
         const start_index = ctx.buf.items.len;
@@ -398,7 +399,12 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             defer _ = chain.pop();
 
             //_ = try ctx.addToken(.keyword_extern, "extern");
-            //_ = try ctx.addToken(.keyword_packed, "packed");
+            for (0..vlen) |vi| {
+                const m_sz = c.btf_member_bitfield_size(t, @intCast(vi));
+                if (m_sz <= 0) break;
+            } else {
+                _ = try ctx.addToken(.keyword_packed, "packed");
+            }
             const struct_tok = try ctx.addToken(.keyword_struct, "struct");
 
             _ = try ctx.addToken(.l_brace, "{");
@@ -843,7 +849,7 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
 
     var buffer = std.ArrayList(u8).init(gpa);
     defer buffer.deinit();
-    try tree.renderToArrayList(&buffer, .{});
+    try tree.renderToArrayList(&buffer, ctx.fixups);
 
     return buffer.toOwnedSliceSentinel(0);
 }
@@ -1193,7 +1199,34 @@ test "empty struct" {
     const got = try translate(gpa, btf);
     defer gpa.free(got);
     const expect =
-        \\pub const bar = struct {};
+        \\pub const bar = packed struct {};
+        \\
+    ;
+    try std.testing.expectEqualStrings(expect, got);
+    try verify_generated(got, gpa);
+}
+
+test "packed struct" {
+    const gpa = std.testing.allocator;
+    const btf = c.btf__new_empty();
+    assert(c.libbpf_get_error(btf) == 0);
+    defer c.btf__free(btf);
+
+    const t = c.btf__add_int(btf, "foo", 4, 0);
+    assert(t > 0);
+    assert(c.btf__add_struct(btf, "bar", 8) > 0);
+    assert(c.btf__add_field(btf, "f1", t, 0, 1) == 0);
+    assert(c.btf__add_field(btf, "f2", t, 3, 3) == 0);
+
+    const got = try translate(gpa, btf);
+    defer gpa.free(got);
+    const expect =
+        \\pub const foo = u32;
+        \\pub const bar = packed struct {
+        \\    f1: u1,
+        \\    _zig_pad1: u2,
+        \\    f2: u3,
+        \\};
         \\
     ;
     try std.testing.expectEqualStrings(expect, got);
