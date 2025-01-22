@@ -320,6 +320,8 @@ fn create_test_step(ctx: *const Ctx) !void {
     });
 
     const run_unit_test = ctx.b.addRunArtifact(exe_tests);
+    const test_bpf_step = ctx.b.step("test-bpf", "Build and run bpf package unit tests");
+    test_bpf_step.dependOn(&run_unit_test.step);
 
     // run tools/trace test script
     const run_trace_script = ctx.b.addSystemCommand(&.{ "sh", "src/tools/trace/build_check_trace.sh" });
@@ -345,7 +347,7 @@ fn create_test_step(ctx: *const Ctx) !void {
     test_vmlinux_step.dependOn(&vmlinux_test.step);
 
     const test_step = ctx.b.step("test", "Build and run all unit tests");
-    test_step.dependOn(&run_unit_test.step);
+    test_step.dependOn(test_bpf_step);
     test_step.dependOn(test_tool_trace_step);
     test_step.dependOn(test_btf_translator_step);
     test_step.dependOn(test_vmlinux_step);
