@@ -40,6 +40,7 @@ fn usage() void {
         \\ --testing
         \\ --lbr
         \\ --vmlinux [/path/to/vmlinux]
+        \\ --count [n]
     ++ "\n", .{});
 }
 
@@ -71,6 +72,7 @@ pub fn main() !void {
 
     var seconds: ?usize = null;
     var vmlinux_path: ?[]const u8 = null;
+    var max_count: ?usize = null;
     while (nextArg(args, &arg_idx)) |arg| {
         if (std.mem.eql(u8, arg, "--timeout")) {
             const s = nextArg(args, &arg_idx) orelse {
@@ -90,6 +92,12 @@ pub fn main() !void {
                 usage();
                 return error.ARGS;
             };
+        } else if (std.mem.eql(u8, arg, "--count")) {
+            const s = nextArg(args, &arg_idx) orelse {
+                usage();
+                return error.ARGS;
+            };
+            max_count = try std.fmt.parseUnsigned(usize, s, 0);
         } else {
             print("unknown parameter\n", .{});
             usage();
@@ -157,11 +165,21 @@ pub fn main() !void {
         _ = testing_call(1, 2);
     }
     const begin_ts = std.time.timestamp();
+    var consumed: usize = 0;
     while (!exiting) {
-        ret = libbpf.ring_buffer__poll(ring_buf, 100);
+        if (max_count) |max| {
+            ret = libbpf.ring_buffer__consume_n(ring_buf, max - consumed);
+        } else {
+            ret = libbpf.ring_buffer__poll(ring_buf, 100);
+        }
 
         if (ret < 0) {
             return error.POLL;
+        }
+        consumed += @intCast(ret);
+
+        if (max_count) |max| {
+            if (consumed >= max) break;
         }
 
         if (seconds) |timeout| {
