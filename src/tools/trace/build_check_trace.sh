@@ -11,7 +11,7 @@ sudo ./zig-out/bin/trace --timeout 2 --testing >./trace_output.txt 2>&1 &
 counter=0
 until grep -q Tracing ./trace_output.txt; do
   sleep .1;
-  if [ "$counter" == 100 ]; then
+  if [ "$counter" = "100" ]; then
     echo "Timeout!"
     cat ./trace_output.txt
     exit 1
