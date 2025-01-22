@@ -30,28 +30,28 @@ fn Map(
         .{
             .name = "type",
             .type = ?*[@intFromEnum(map_type)]u8,
-            .default_value = null,
+            .default_value_ptr = null,
             .is_comptime = false,
             .alignment = @alignOf(?*[@intFromEnum(map_type)]u8),
         },
         .{
             .name = "key",
             .type = ?*Key,
-            .default_value = null,
+            .default_value_ptr = null,
             .is_comptime = false,
             .alignment = @alignOf(?*Key),
         },
         .{
             .name = "value",
             .type = ?*Value,
-            .default_value = null,
+            .default_value_ptr = null,
             .is_comptime = false,
             .alignment = @alignOf(?*Value),
         },
     } ++ (if (max_entries > 0) [_]StructField{.{
         .name = "max_entries",
         .type = ?*[max_entries]u8,
-        .default_value = null,
+        .default_value_ptr = null,
         .is_comptime = false,
         .alignment = @alignOf(?*[max_entries]u8),
     }} else [_]StructField{}) ++ (if (map_flags > 0) [_]StructField{.{

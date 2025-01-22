@@ -34,7 +34,7 @@ pub fn Ctx(comptime func_name: []const u8) type {
             .{
                 .name = std.fmt.comptimePrint("arg{}", .{i}),
                 .type = arg.type.?,
-                .default_value = null,
+                .default_value_ptr = null,
                 .is_comptime = false,
                 .alignment = @sizeOf(u64),
             },
@@ -45,7 +45,7 @@ pub fn Ctx(comptime func_name: []const u8) type {
         .{
             .name = "ret",
             .type = f.@"fn".return_type.?,
-            .default_value = null,
+            .default_value_ptr = null,
             .is_comptime = false,
             .alignment = @sizeOf(u64),
         },
