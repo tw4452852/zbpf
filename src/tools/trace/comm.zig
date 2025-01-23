@@ -6,6 +6,7 @@ const in_bpf_program = switch (@import("builtin").cpu.arch) {
     .bpfel, .bpfeb => true,
     else => false,
 };
+const is_pointer = bpf.Args.is_pointer;
 
 /// Structure passing from BPF side to userspace for tracing.
 pub const TRACE_RECORD = extern struct {
@@ -64,6 +65,7 @@ pub fn Arg(comptime name: []const u8, comptime kind: build_options.Kind) type {
 
     return struct {
         pub fn Field(comptime specifier: []const u8) type {
+            @setEvalBranchQuota(1000000);
             // trim trailing placeholder if any
             const slash = comptime std.mem.lastIndexOfScalar(u8, specifier, '/');
             comptime var it = std.mem.tokenizeScalar(u8, specifier[0..if (slash) |si| si else specifier.len], '.');
@@ -135,7 +137,7 @@ pub fn Arg(comptime name: []const u8, comptime kind: build_options.Kind) type {
                 }
 
                 comptime var ti = @typeInfo(FT);
-                var src: usize = if (ti == .pointer) @intFromPtr(arg) else @intFromPtr(&arg);
+                var src: usize = if (is_pointer(FT)) @intFromPtr(arg) else @intFromPtr(&arg);
 
                 inline while (comptime it.next()) |field_name| {
                     if (ti == .optional) {
