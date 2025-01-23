@@ -11,8 +11,31 @@ const c = @cImport({
     @cInclude("linux/if_link.h");
 });
 
-test "xdp_ping" {
-    const bytes = @embedFile("@xdp_ping");
+// Since Zig translate-c doesn't support bitfields, it translates them to opaque types.
+// The struct are actually not really bitfields, they only have a last field `size_t :0;` which is a zero-width bitfield, used to add alignment between bitfields.
+// The layout *should* thus be the same as a regular struct.
+// https://github.com/libbpf/libbpf/blob/324f3c3846d99c8a1e1384a55591f893f0ae5de4/src/libbpf.h#L1282
+pub const Hook = extern struct {
+    sz: usize,
+    ifindex: c_int,
+    attach_point: c_int,
+    parent: u32,
+};
+
+pub const Opts = extern struct {
+    sz: usize,
+    prog_fd: c_int,
+    flags: u32,
+    prog_id: u32,
+    handle: u32,
+    priority: u32,
+};
+
+const EEXIST: c_int = @intFromEnum(std.c.E.EXIST);
+
+// https://patchwork.kernel.org/project/netdevbpf/patch/20210512103451.989420-3-memxor@gmail.com/
+test "tc_ingress" {
+    const bytes = @embedFile("@tc_ingress");
 
     _ = libbpf.libbpf_set_print(root.dbg_printf);
 
@@ -29,7 +52,7 @@ test "xdp_ping" {
         return error.LOAD;
     }
 
-    const prog = libbpf.bpf_object__find_program_by_name(obj, "xdp_ping").?;
+    const prog = libbpf.bpf_object__find_program_by_name(obj, "tc_ingress").?;
     const ipv4 = libbpf.bpf_object__find_map_by_name(obj, "ipv4").?;
     const ipv6 = libbpf.bpf_object__find_map_by_name(obj, "ipv6").?;
 
@@ -40,12 +63,45 @@ test "xdp_ping" {
     }
 
     const prog_fd = libbpf.bpf_program__fd(prog);
-    ret = libbpf.bpf_xdp_attach(@intCast(idx), prog_fd, c.XDP_FLAGS_UPDATE_IF_NOEXIST, null);
+    var hook: Hook = std.mem.zeroes(Hook);
+    hook.sz = @sizeOf(Hook);
+    hook.ifindex = @intCast(idx);
+    hook.attach_point = libbpf.BPF_TC_INGRESS;
+
+    // https://github.com/libbpf/libbpf/blob/324f3c3846d99c8a1e1384a55591f893f0ae5de4/src/netlink.c#L616
+    // If there is already a qdisc hook on the interface, it will return -EEXIST.
+    // We can ignore this error and continue to attach the program to the existing hook.
+    ret = libbpf.bpf_tc_hook_create(@alignCast(@ptrCast(&hook)));
+    if (ret < 0) {
+        if (ret == -EEXIST) {
+            print("there's already a qdisc hook on the interface, attaching to it...\n", .{});
+        } else {
+            print("failed to create hook: {}\n", .{std.posix.errno(-1)});
+            return error.CREATE_HOOK;
+        }
+    }
+
+    var opts: Opts = std.mem.zeroes(Opts);
+    opts.sz = @sizeOf(Opts);
+    opts.prog_fd = prog_fd;
+
+    ret = libbpf.bpf_tc_attach(@ptrCast(&hook), @ptrCast(&opts));
     if (ret < 0) {
         print("failed to attach program: {}\n", .{std.posix.errno(-1)});
         return error.ATTACH;
     }
-    defer _ = libbpf.bpf_xdp_detach(@intCast(idx), c.XDP_FLAGS_UPDATE_IF_NOEXIST, null);
+
+    print("Handle: {}\n", .{opts.handle});
+    print("Priority: {}\n", .{opts.priority});
+
+    defer {
+        opts.prog_id = 0;
+        opts.prog_fd = 0;
+        ret = libbpf.bpf_tc_detach(@ptrCast(&hook), @ptrCast(&opts));
+        if (ret < 0) {
+            print("failed to detach program: {}\n", .{std.posix.errno(-1)});
+        }
+    }
 
     const expected: u32 = @as(*const u32, @alignCast(@ptrCast("ipv4"))).*;
     const expected6: u32 = @as(*const u32, @alignCast(@ptrCast("ipv6"))).*;
