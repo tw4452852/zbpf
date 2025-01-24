@@ -696,7 +696,7 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
         }
         var chain = Chain.init(gpa);
         defer chain.deinit();
-        var seen = std.StringHashMap(usize).init(gpa);
+        var seen = std.StringHashMap(void).init(gpa);
         defer seen.deinit();
 
         for (1..c.btf__type_cnt(btf)) |i| {
@@ -740,13 +740,8 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
             };
 
             const gop = try seen.getOrPut(name);
-            if (gop.found_existing) {
-                gop.value_ptr.* += 1;
-            } else {
-                gop.value_ptr.* = 0;
-            }
             const uniq_name = if (gop.found_existing and kind != .func) name: {
-                const new_name = try std.fmt.allocPrint(gpa, "{s}__{d}", .{ name, gop.value_ptr.* });
+                const new_name = try std.fmt.allocPrint(gpa, "{s}__{d}", .{ name, i });
                 gpa.free(name);
                 break :name new_name;
             } else name;
@@ -809,7 +804,7 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
                 const name = std.mem.sliceTo(c.btf__name_by_offset(btf, t.name_off), 0);
 
                 if (kind != .func or seen.contains(name)) continue;
-                try seen.put(name, 0);
+                try seen.put(name, {});
 
                 dprint("{} {s}:", .{ i, @tagName(kind) });
                 defer dprint("\n", .{});
@@ -918,7 +913,7 @@ test "dup name" {
     defer gpa.free(got);
     const expect =
         \\pub const foo = u8;
-        \\pub const foo__1 = i32;
+        \\pub const foo__2 = i32;
         \\
     ;
     try std.testing.expectEqualStrings(expect, got);
