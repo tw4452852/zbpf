@@ -49,8 +49,8 @@ fn create_libelf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.
     }).artifact("elf");
 }
 
-fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?[]const u8) *std.Build.Module {
-    const exe = create_btf_translator(b, libbpf);
+fn create_vmlinux(b: *std.Build, target: std.Build.ResolvedTarget, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?[]const u8) *std.Build.Module {
+    const exe = create_btf_translator(b, target, libbpf);
     const run_exe = b.addRunArtifact(exe);
 
     if (vmlinux_bin) |vmlinux| run_exe.addPrefixedFileArg("-vmlinux", .{ .cwd_relative = vmlinux });
@@ -61,9 +61,7 @@ fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?
     return b.addModule("vmlinux", .{ .root_source_file = vmlinux_zig });
 }
 
-fn create_btf_translator(b: *std.Build, libbpf: *std.Build.Step.Compile) *std.Build.Step.Compile {
-    // build for native
-    const target = b.graph.host;
+fn create_btf_translator(b: *std.Build, target: std.Build.ResolvedTarget, libbpf: *std.Build.Step.Compile) *std.Build.Step.Compile {
     const optimize: std.builtin.OptimizeMode = .ReleaseFast;
 
     const exe = b.addExecutable(.{
@@ -80,9 +78,7 @@ fn create_btf_translator(b: *std.Build, libbpf: *std.Build.Step.Compile) *std.Bu
     return exe;
 }
 
-fn create_btf_sanitizer(b: *std.Build, libbpf: *std.Build.Step.Compile, libelf: *std.Build.Step.Compile) *std.Build.Step.Compile {
-    // build for native
-    const target = b.graph.host;
+fn create_btf_sanitizer(b: *std.Build, target: std.Build.ResolvedTarget, libbpf: *std.Build.Step.Compile, libelf: *std.Build.Step.Compile) *std.Build.Step.Compile {
     const optimize: std.builtin.OptimizeMode = .ReleaseFast;
 
     const exe = b.addExecutable(.{
@@ -102,15 +98,15 @@ fn create_btf_sanitizer(b: *std.Build, libbpf: *std.Build.Step.Compile, libelf: 
 }
 
 fn create_native_tools(b: *std.Build, vmlinux_bin: ?[]const u8, optimize: std.builtin.OptimizeMode) struct { *std.Build.Module, *std.Build.Step.Compile } {
-    // build for native
-    const target = b.graph.host;
+    // build for native with musl libc
+    const target = std.Build.resolveTargetQuery(b, .{ .abi = .musl });
 
     const libbpf = create_libbpf(b, target, optimize);
     const libelf = create_libelf(b, target, optimize);
 
     return .{
-        create_vmlinux(b, libbpf, vmlinux_bin),
-        create_btf_sanitizer(b, libbpf, libelf),
+        create_vmlinux(b, target, libbpf, vmlinux_bin),
+        create_btf_sanitizer(b, target, libbpf, libelf),
     };
 }
 
