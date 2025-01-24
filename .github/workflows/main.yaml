@@ -19,6 +19,7 @@ jobs:
       - run: zig build
       - run: zig build docs
       - run: zig build test
+      - run: zig build test-vmlinux-offset
   lint:
     runs-on: ubuntu-latest
     steps:
