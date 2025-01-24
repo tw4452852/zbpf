@@ -386,6 +386,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
         },
         .@"struct" => blk: {
             const vlen: u16 = c.btf_vlen(t);
+            const alignment = c.btf__align_of(btf, @intCast(i));
             const sz = t.unnamed_0.size;
             const m: [*c]const c.struct_btf_member = c.btf_members(t);
             var members = std.ArrayList(NodeIndex).init(ctx.gpa);
@@ -397,6 +398,8 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             }
             try chain.append(i);
             defer _ = chain.pop();
+
+            dprint(" align({}) ", .{alignment});
 
             _ = try ctx.addToken(.keyword_extern, "extern");
             const struct_tok = try ctx.addToken(.keyword_struct, "struct");
@@ -471,12 +474,24 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
 
                     const type_expr = try add_child_node(btf, m[vi].type, names, ctx, chain);
 
+                    const align_expr = if (alignment == 1) align_blk: {
+                        _ = try ctx.addToken(.keyword_align, "align");
+                        _ = try ctx.addToken(.l_paren, "(");
+                        const align_expr = try ctx.addNode(.{
+                            .tag = .number_literal,
+                            .main_token = try ctx.addToken(.number_literal, "1"),
+                            .data = undefined,
+                        });
+                        _ = try ctx.addToken(.r_paren, ")");
+                        break :align_blk align_expr;
+                    } else 0;
+
                     try members.append(try ctx.addNode(.{
-                        .tag = .container_field_init,
+                        .tag = .container_field_align,
                         .main_token = name_tok,
                         .data = .{
                             .lhs = type_expr,
-                            .rhs = 0,
+                            .rhs = align_expr,
                         },
                     }));
                     _ = try ctx.addToken(.comma, ",");
@@ -523,6 +538,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
         },
         .@"union" => blk: {
             const vlen: u16 = c.btf_vlen(t);
+            const alignment = c.btf__align_of(btf, @intCast(i));
             const m: [*c]const c.struct_btf_member = c.btf_members(t);
             const members = try ctx.gpa.alloc(NodeIndex, vlen);
             defer ctx.gpa.free(members);
@@ -549,12 +565,24 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
 
                 const type_expr = try add_child_node(btf, m[vi].type, names, ctx, chain);
 
+                const align_expr = if (alignment == 1) align_blk: {
+                    _ = try ctx.addToken(.keyword_align, "align");
+                    _ = try ctx.addToken(.l_paren, "(");
+                    const align_expr = try ctx.addNode(.{
+                        .tag = .number_literal,
+                        .main_token = try ctx.addToken(.number_literal, "1"),
+                        .data = undefined,
+                    });
+                    _ = try ctx.addToken(.r_paren, ")");
+                    break :align_blk align_expr;
+                } else 0;
+
                 members[vi] = try ctx.addNode(.{
-                    .tag = .container_field_init,
+                    .tag = .container_field_align,
                     .main_token = name_tok,
                     .data = .{
                         .lhs = type_expr,
-                        .rhs = 0,
+                        .rhs = align_expr,
                     },
                 });
                 _ = try ctx.addToken(.comma, ",");
@@ -1207,8 +1235,8 @@ test "struct" {
         \\pub const foo = u32;
         \\pub const ptr_to_foo = ?[*]foo;
         \\pub const bar = extern struct {
-        \\    f1: foo,
-        \\    field1: ptr_to_foo,
+        \\    f1: foo align(1),
+        \\    field1: ptr_to_foo align(1),
         \\};
         \\
     ;
@@ -1257,8 +1285,8 @@ test "ptr loop" {
         \\pub const foo = u32;
         \\pub const ptr_to_bar = ?[*]bar;
         \\pub const bar = extern struct {
-        \\    f1: foo,
-        \\    f2: ptr_to_bar,
+        \\    f1: foo align(1),
+        \\    f2: ptr_to_bar align(1),
         \\};
         \\
     ;
@@ -1286,8 +1314,8 @@ test "union" {
         \\pub const foo = u32;
         \\pub const ptr_to_foo = ?[*]foo;
         \\pub const bar = extern union {
-        \\    f1: foo,
-        \\    field1: ptr_to_foo,
+        \\    f1: foo align(1),
+        \\    field1: ptr_to_foo align(1),
         \\};
         \\
     ;
@@ -1446,7 +1474,7 @@ test "bitfields" {
         \\    _zig_merged_bitfieds_offset_8_16: u8,
         \\    _zig_merged_bitfieds_offset_16_24: u8,
         \\    _zig_merged_bitfieds_offset_24_32: u8,
-        \\    f3: ptr_to_foo,
+        \\    f3: ptr_to_foo align(1),
         \\};
         \\
     ;
