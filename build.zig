@@ -101,10 +101,9 @@ fn create_btf_sanitizer(b: *std.Build, libbpf: *std.Build.Step.Compile, libelf: 
     return exe;
 }
 
-fn create_native_tools(b: *std.Build, vmlinux_bin: ?[]const u8) struct { *std.Build.Module, *std.Build.Step.Compile } {
+fn create_native_tools(b: *std.Build, vmlinux_bin: ?[]const u8, optimize: std.builtin.OptimizeMode) struct { *std.Build.Module, *std.Build.Step.Compile } {
     // build for native
     const target = b.graph.host;
-    const optimize: std.builtin.OptimizeMode = .ReleaseFast;
 
     const libbpf = create_libbpf(b, target, optimize);
     const libelf = create_libelf(b, target, optimize);
@@ -146,7 +145,7 @@ pub fn build(b: *std.Build) !void {
     const install = if (b.option(bool, "install", "alias for -fno-emit-bin, used for testing")) |v| v else true;
 
     const libbpf = create_libbpf(b, target, optimize);
-    const vmlinux, const btf_sanitizer = create_native_tools(b, vmlinux_bin);
+    const vmlinux, const btf_sanitizer = create_native_tools(b, vmlinux_bin, optimize);
     const bpf = create_bpf(b, vmlinux);
 
     const ctx = Ctx{
@@ -342,7 +341,14 @@ fn create_test_step(ctx: *const Ctx) !void {
         .target = ctx.target,
         .optimize = ctx.optimize,
     });
+    vmlinux_test.root_module.addAnonymousImport("@build_options", .{
+        .root_source_file = ctx.b.addWriteFiles().add(
+            "generated_test_build_ctx.zig",
+            ctx.b.fmt("pub const vmlinux_bin_path :[:0]const u8 = \"{s}\";", .{if (ctx.vmlinux_bin_path) |path| path else ""}),
+        ),
+    });
     vmlinux_test.root_module.addImport("vmlinux", ctx.vmlinux);
+    vmlinux_test.linkLibrary(ctx.libbpf_step);
     const test_vmlinux_step = ctx.b.step("test-vmlinux", "Build vmlinux unit test");
     test_vmlinux_step.dependOn(&vmlinux_test.step);
 
