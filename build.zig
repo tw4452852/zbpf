@@ -178,9 +178,9 @@ pub fn build(b: *std.Build) !void {
 
     try create_main_step(&ctx);
     try create_trace_step(&ctx);
-    try create_test_step(&ctx);
+    const vot = try create_vmlinux_offset_test_step(&ctx, vmlinux_offset_tests_generator);
+    try create_test_step(&ctx, vot);
     try create_fuzz_test_step(&ctx);
-    try create_vmlinux_offset_test_step(&ctx, vmlinux_offset_tests_generator);
     try create_docs_step(&ctx);
 }
 
@@ -294,7 +294,7 @@ fn create_target_step(ctx: *const Ctx, main_path: []const u8, prog_path: []const
     }
 }
 
-fn create_test_step(ctx: *const Ctx) !void {
+fn create_test_step(ctx: *const Ctx, vmlinux_offset_test_step: *std.Build.Step) !void {
     // Creates a step for unit testing.
     const filter = ctx.test_filter;
     const exe_tests = ctx.b.addTest(.{
@@ -356,14 +356,7 @@ fn create_test_step(ctx: *const Ctx) !void {
         .target = ctx.target,
         .optimize = ctx.optimize,
     });
-    vmlinux_test.root_module.addAnonymousImport("@build_options", .{
-        .root_source_file = ctx.b.addWriteFiles().add(
-            "generated_test_build_ctx.zig",
-            ctx.b.fmt("pub const vmlinux_bin_path :[:0]const u8 = \"{s}\";", .{if (ctx.vmlinux_bin_path) |path| path else ""}),
-        ),
-    });
     vmlinux_test.root_module.addImport("vmlinux", ctx.vmlinux);
-    vmlinux_test.linkLibrary(ctx.libbpf_step);
     const test_vmlinux_step = ctx.b.step("test-vmlinux", "Build vmlinux unit test");
     test_vmlinux_step.dependOn(&vmlinux_test.step);
 
@@ -372,6 +365,7 @@ fn create_test_step(ctx: *const Ctx) !void {
     test_step.dependOn(test_tool_trace_step);
     test_step.dependOn(test_btf_translator_step);
     test_step.dependOn(test_vmlinux_step);
+    test_step.dependOn(vmlinux_offset_test_step);
 }
 
 fn create_btf_translator_test(ctx: *const Ctx) *std.Build.Step.Compile {
@@ -419,7 +413,7 @@ fn create_fuzz_test_step(ctx: *const Ctx) !void {
     step.dependOn(&run.step);
 }
 
-fn create_vmlinux_offset_test_step(ctx: *const Ctx, generator: *std.Build.Step.Compile) !void {
+fn create_vmlinux_offset_test_step(ctx: *const Ctx, generator: *std.Build.Step.Compile) !*std.Build.Step {
     const run_exe = ctx.b.addRunArtifact(generator);
 
     if (ctx.vmlinux_bin_path) |vmlinux| run_exe.addPrefixedFileArg("-vmlinux", .{ .cwd_relative = vmlinux });
@@ -437,6 +431,8 @@ fn create_vmlinux_offset_test_step(ctx: *const Ctx, generator: *std.Build.Step.C
 
     const step = ctx.b.step("test-vmlinux-offset", "Build vmlinux offset tests");
     step.dependOn(&run.step);
+
+    return step;
 }
 
 fn create_docs_step(ctx: *const Ctx) !void {
