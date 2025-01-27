@@ -49,8 +49,8 @@ fn create_libelf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.
     }).artifact("elf");
 }
 
-fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?[]const u8) *std.Build.Module {
-    const exe = create_btf_translator(b, libbpf);
+fn create_vmlinux(b: *std.Build, target: std.Build.ResolvedTarget, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?[]const u8) *std.Build.Module {
+    const exe = create_btf_translator(b, target, libbpf);
     const run_exe = b.addRunArtifact(exe);
 
     if (vmlinux_bin) |vmlinux| run_exe.addPrefixedFileArg("-vmlinux", .{ .cwd_relative = vmlinux });
@@ -61,9 +61,7 @@ fn create_vmlinux(b: *std.Build, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?
     return b.addModule("vmlinux", .{ .root_source_file = vmlinux_zig });
 }
 
-fn create_btf_translator(b: *std.Build, libbpf: *std.Build.Step.Compile) *std.Build.Step.Compile {
-    // build for native
-    const target = b.graph.host;
+fn create_btf_translator(b: *std.Build, target: std.Build.ResolvedTarget, libbpf: *std.Build.Step.Compile) *std.Build.Step.Compile {
     const optimize: std.builtin.OptimizeMode = .ReleaseFast;
 
     const exe = b.addExecutable(.{
@@ -80,9 +78,7 @@ fn create_btf_translator(b: *std.Build, libbpf: *std.Build.Step.Compile) *std.Bu
     return exe;
 }
 
-fn create_btf_sanitizer(b: *std.Build, libbpf: *std.Build.Step.Compile, libelf: *std.Build.Step.Compile) *std.Build.Step.Compile {
-    // build for native
-    const target = b.graph.host;
+fn create_btf_sanitizer(b: *std.Build, target: std.Build.ResolvedTarget, libbpf: *std.Build.Step.Compile, libelf: *std.Build.Step.Compile) *std.Build.Step.Compile {
     const optimize: std.builtin.OptimizeMode = .ReleaseFast;
 
     const exe = b.addExecutable(.{
@@ -101,17 +97,34 @@ fn create_btf_sanitizer(b: *std.Build, libbpf: *std.Build.Step.Compile, libelf: 
     return exe;
 }
 
-fn create_native_tools(b: *std.Build, vmlinux_bin: ?[]const u8) struct { *std.Build.Module, *std.Build.Step.Compile } {
-    // build for native
-    const target = b.graph.host;
+fn create_vmlinux_offset_tests_generator(b: *std.Build, target: std.Build.ResolvedTarget, libbpf: *std.Build.Step.Compile) *std.Build.Step.Compile {
     const optimize: std.builtin.OptimizeMode = .ReleaseFast;
+
+    const exe = b.addExecutable(.{
+        .name = "gen_vmlinux_offset_tests",
+        .root_source_file = b.path("src/tests/gen_vmlinux_offset_tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    exe.linkLibrary(libbpf);
+    exe.linkLibC();
+    b.installArtifact(exe);
+
+    return exe;
+}
+
+fn create_native_tools(b: *std.Build, vmlinux_bin: ?[]const u8, optimize: std.builtin.OptimizeMode) struct { *std.Build.Module, *std.Build.Step.Compile, *std.Build.Step.Compile } {
+    // build for native with musl libc
+    const target = std.Build.resolveTargetQuery(b, .{ .abi = .musl });
 
     const libbpf = create_libbpf(b, target, optimize);
     const libelf = create_libelf(b, target, optimize);
 
     return .{
-        create_vmlinux(b, libbpf, vmlinux_bin),
-        create_btf_sanitizer(b, libbpf, libelf),
+        create_vmlinux(b, target, libbpf, vmlinux_bin),
+        create_btf_sanitizer(b, target, libbpf, libelf),
+        create_vmlinux_offset_tests_generator(b, target, libbpf),
     };
 }
 
@@ -146,7 +159,7 @@ pub fn build(b: *std.Build) !void {
     const install = if (b.option(bool, "install", "alias for -fno-emit-bin, used for testing")) |v| v else true;
 
     const libbpf = create_libbpf(b, target, optimize);
-    const vmlinux, const btf_sanitizer = create_native_tools(b, vmlinux_bin);
+    const vmlinux, const btf_sanitizer, const vmlinux_offset_tests_generator = create_native_tools(b, vmlinux_bin, optimize);
     const bpf = create_bpf(b, vmlinux);
 
     const ctx = Ctx{
@@ -165,7 +178,8 @@ pub fn build(b: *std.Build) !void {
 
     try create_main_step(&ctx);
     try create_trace_step(&ctx);
-    try create_test_step(&ctx);
+    const vot = try create_vmlinux_offset_test_step(&ctx, vmlinux_offset_tests_generator);
+    try create_test_step(&ctx, vot);
     try create_fuzz_test_step(&ctx);
     try create_docs_step(&ctx);
 }
@@ -280,7 +294,7 @@ fn create_target_step(ctx: *const Ctx, main_path: []const u8, prog_path: []const
     }
 }
 
-fn create_test_step(ctx: *const Ctx) !void {
+fn create_test_step(ctx: *const Ctx, vmlinux_offset_test_step: *std.Build.Step) !void {
     // Creates a step for unit testing.
     const filter = ctx.test_filter;
     const exe_tests = ctx.b.addTest(.{
@@ -351,6 +365,7 @@ fn create_test_step(ctx: *const Ctx) !void {
     test_step.dependOn(test_tool_trace_step);
     test_step.dependOn(test_btf_translator_step);
     test_step.dependOn(test_vmlinux_step);
+    test_step.dependOn(vmlinux_offset_test_step);
 }
 
 fn create_btf_translator_test(ctx: *const Ctx) *std.Build.Step.Compile {
@@ -396,6 +411,28 @@ fn create_fuzz_test_step(ctx: *const Ctx) !void {
 
     const step = ctx.b.step("fuzz-test", "Build and run fuzzing tests");
     step.dependOn(&run.step);
+}
+
+fn create_vmlinux_offset_test_step(ctx: *const Ctx, generator: *std.Build.Step.Compile) !*std.Build.Step {
+    const run_exe = ctx.b.addRunArtifact(generator);
+
+    if (ctx.vmlinux_bin_path) |vmlinux| run_exe.addPrefixedFileArg("-vmlinux", .{ .cwd_relative = vmlinux });
+    if (debugging) run_exe.addArg("-debug");
+    const generated_file = run_exe.addPrefixedOutputFileArg("-o", ctx.b.fmt("generated_vmlinux_offset_tests.zig", .{}));
+
+    const exe_tests = ctx.b.addTest(.{
+        .root_source_file = generated_file,
+        .target = ctx.target,
+        .optimize = ctx.optimize,
+        .filter = ctx.test_filter,
+    });
+    exe_tests.root_module.addImport("vmlinux", ctx.vmlinux);
+    const run = ctx.b.addRunArtifact(exe_tests);
+
+    const step = ctx.b.step("test-vmlinux-offset", "Build vmlinux offset tests");
+    step.dependOn(&run.step);
+
+    return step;
 }
 
 fn create_docs_step(ctx: *const Ctx) !void {

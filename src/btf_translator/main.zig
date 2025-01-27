@@ -387,6 +387,8 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
         },
         .@"struct" => blk: {
             const vlen: u16 = c.btf_vlen(t);
+            const alignment = c.btf__align_of(btf, @intCast(i));
+            const sz = t.unnamed_0.size;
             const m: [*c]const c.struct_btf_member = c.btf_members(t);
             var members = std.ArrayList(NodeIndex).init(ctx.gpa);
             try members.ensureUnusedCapacity(vlen);
@@ -398,72 +400,120 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             try chain.append(i);
             defer _ = chain.pop();
 
-            //_ = try ctx.addToken(.keyword_extern, "extern");
-            for (0..vlen) |vi| {
-                const m_sz = c.btf_member_bitfield_size(t, @intCast(vi));
-                if (m_sz <= 0) break;
-            } else {
-                _ = try ctx.addToken(.keyword_packed, "packed");
-            }
+            dprint(" align({}) ", .{alignment});
+
+            _ = try ctx.addToken(.keyword_extern, "extern");
             const struct_tok = try ctx.addToken(.keyword_struct, "struct");
 
             _ = try ctx.addToken(.l_brace, "{");
-            var cur_off: usize = 0;
+            var bitfield_off_begin: ?usize = null;
+            var cur_bitoff: usize = 0;
+
+            const add_field = struct {
+                fn f(_ctx: *Context, prefix: []const u8, begin: usize, _bits: usize) !NodeIndex {
+                    const name_tok = try _ctx.addTokenFmt(.identifier, "{s}_offset_{d}_{d}", .{ prefix, begin, begin + _bits });
+                    _ = try _ctx.addToken(.colon, ":");
+                    const type_expr = try _ctx.addNode(.{
+                        .tag = .identifier,
+                        .main_token = try _ctx.addTokenFmt(.identifier, "u{d}", .{_bits}),
+                        .data = undefined,
+                    });
+                    const ret = try _ctx.addNode(.{
+                        .tag = .container_field_init,
+                        .main_token = name_tok,
+                        .data = .{
+                            .lhs = type_expr,
+                            .rhs = 0,
+                        },
+                    });
+                    _ = try _ctx.addToken(.comma, ",");
+                    return ret;
+                }
+            }.f;
 
             for (0..vlen) |vi| {
                 const m_sz = c.btf_member_bitfield_size(t, @intCast(vi));
                 const m_off = c.btf_member_bit_offset(t, @intCast(vi));
 
-                if (cur_off < m_off) {
-                    const pad_tok = try ctx.addTokenFmt(.identifier, "_zig_pad{d}", .{vi});
-                    _ = try ctx.addToken(.colon, ":");
-                    const type_expr = try ctx.addNode(.{
-                        .tag = .identifier,
-                        .main_token = try ctx.addTokenFmt(.identifier, "u{d}", .{m_off - cur_off}),
-                        .data = undefined,
-                    });
-                    try members.append(try ctx.addNode(.{
-                        .tag = .container_field_init,
-                        .main_token = pad_tok,
-                        .data = .{
-                            .lhs = type_expr,
-                            .rhs = 0,
-                        },
-                    }));
+                // Record the first bitfield position
+                if (m_sz > 0 and bitfield_off_begin == null) {
+                    bitfield_off_begin = m_off;
                 }
 
-                const name_tok = if (m[vi].name_off != 0)
-                    try ctx.addIdentifier(std.mem.sliceTo(c.btf__name_by_offset(btf, m[vi].name_off), 0))
-                else name: {
-                    const name = try std.fmt.allocPrint(ctx.gpa, "field{}", .{vi});
-                    defer ctx.gpa.free(name);
-                    break :name try ctx.addIdentifier(name);
-                };
-                _ = try ctx.addToken(.colon, ":");
+                // Merge all accumulated bitfields
+                if (bitfield_off_begin != null and m_sz == 0) {
+                    const bits = m_off - bitfield_off_begin.?;
+                    cur_bitoff = m_off;
+                    bitfield_off_begin = null;
 
-                const type_expr = if (m_sz > 0)
-                    try ctx.addNode(.{
-                        .tag = .identifier,
-                        .main_token = try ctx.addTokenFmt(.identifier, "u{d}", .{m_sz}),
-                        .data = undefined,
-                    })
-                else
-                    try add_child_node(btf, m[vi].type, names, ctx, chain);
+                    // TODO: packed struct
+                    // The reason for divCeil is that some unused fields may be missing in btf, e.g. struct ioam6_trace_hdr.
+                    const bytes = try std.math.divCeil(usize, bits, 8);
+                    for (0..bytes) |n| {
+                        try members.append(try add_field(ctx, "_zig_merged_bitfieds", m_off - bits + (n * 8), 8));
+                    }
+                }
 
-                try members.append(try ctx.addNode(.{
-                    .tag = .container_field_init,
-                    .main_token = name_tok,
-                    .data = .{
-                        .lhs = type_expr,
-                        .rhs = 0,
-                    },
-                }));
-                _ = try ctx.addToken(.comma, ",");
+                // Only handle non-bitfield here, bitfield will be accumulated to be merged later
+                if (m_sz == 0) {
+                    // Add padding when necessary
+                    if (cur_bitoff < m_off) {
+                        const bytes = try std.math.divExact(usize, m_off - cur_bitoff, 8);
+                        for (0..bytes) |n| {
+                            try members.append(try add_field(ctx, "_zig_padding", cur_bitoff + n * 8, 8));
+                        }
+                    }
 
-                cur_off = m_off + if (m_sz > 0) m_sz else sz: {
+                    const name_tok = if (m[vi].name_off != 0)
+                        try ctx.addIdentifier(std.mem.sliceTo(c.btf__name_by_offset(btf, m[vi].name_off), 0))
+                    else name: {
+                        const name = try std.fmt.allocPrint(ctx.gpa, "field{}", .{vi});
+                        defer ctx.gpa.free(name);
+                        break :name try ctx.addIdentifier(name);
+                    };
+                    _ = try ctx.addToken(.colon, ":");
+
+                    const type_expr = try add_child_node(btf, m[vi].type, names, ctx, chain);
+
+                    const align_expr = if (alignment == 1) align_blk: {
+                        _ = try ctx.addToken(.keyword_align, "align");
+                        _ = try ctx.addToken(.l_paren, "(");
+                        const align_expr = try ctx.addNode(.{
+                            .tag = .number_literal,
+                            .main_token = try ctx.addToken(.number_literal, "1"),
+                            .data = undefined,
+                        });
+                        _ = try ctx.addToken(.r_paren, ")");
+                        break :align_blk align_expr;
+                    } else 0;
+
+                    try members.append(try ctx.addNode(.{
+                        .tag = .container_field_align,
+                        .main_token = name_tok,
+                        .data = .{
+                            .lhs = type_expr,
+                            .rhs = align_expr,
+                        },
+                    }));
+                    _ = try ctx.addToken(.comma, ",");
+                }
+
+                cur_bitoff = m_off + if (m_sz > 0) m_sz else sz: {
                     const byte_sz = c.btf__resolve_size(btf, m[vi].type);
                     break :sz if (byte_sz < 0) 0 else @as(usize, @intCast(byte_sz * 8));
                 };
+            }
+            // Trailing bits
+            if (bitfield_off_begin) |begin| {
+                const bytes = try std.math.divExact(usize, sz * 8 - begin, 8);
+                for (0..bytes) |n| {
+                    try members.append(try add_field(ctx, "_zig_merged_bitfieds", cur_bitoff + n * 8, 8));
+                }
+            } else if (cur_bitoff < sz * 8) {
+                const bytes = try std.math.divExact(usize, sz * 8 - cur_bitoff, 8);
+                for (0..bytes) |n| {
+                    try members.append(try add_field(ctx, "_zig_padding", cur_bitoff + n * 8, 8));
+                }
             }
             _ = try ctx.addToken(.r_brace, "}");
 
@@ -489,6 +539,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
         },
         .@"union" => blk: {
             const vlen: u16 = c.btf_vlen(t);
+            const alignment = c.btf__align_of(btf, @intCast(i));
             const m: [*c]const c.struct_btf_member = c.btf_members(t);
             const members = try ctx.gpa.alloc(NodeIndex, vlen);
             defer ctx.gpa.free(members);
@@ -499,8 +550,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             try chain.append(i);
             defer _ = chain.pop();
 
-            //_ = try ctx.addToken(.keyword_extern, "extern");
-            //_ = try ctx.addToken(.keyword_packed, "packed");
+            _ = try ctx.addToken(.keyword_extern, "extern");
             const union_tok = try ctx.addToken(.keyword_union, "union");
 
             _ = try ctx.addToken(.l_brace, "{");
@@ -516,12 +566,24 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
 
                 const type_expr = try add_child_node(btf, m[vi].type, names, ctx, chain);
 
+                const align_expr = if (alignment == 1) align_blk: {
+                    _ = try ctx.addToken(.keyword_align, "align");
+                    _ = try ctx.addToken(.l_paren, "(");
+                    const align_expr = try ctx.addNode(.{
+                        .tag = .number_literal,
+                        .main_token = try ctx.addToken(.number_literal, "1"),
+                        .data = undefined,
+                    });
+                    _ = try ctx.addToken(.r_paren, ")");
+                    break :align_blk align_expr;
+                } else 0;
+
                 members[vi] = try ctx.addNode(.{
-                    .tag = .container_field_init,
+                    .tag = .container_field_align,
                     .main_token = name_tok,
                     .data = .{
                         .lhs = type_expr,
-                        .rhs = 0,
+                        .rhs = align_expr,
                     },
                 });
                 _ = try ctx.addToken(.comma, ",");
@@ -663,7 +725,7 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
         }
         var chain = Chain.init(gpa);
         defer chain.deinit();
-        var seen = std.StringHashMap(usize).init(gpa);
+        var seen = std.StringHashMap(void).init(gpa);
         defer seen.deinit();
 
         for (1..c.btf__type_cnt(btf)) |i| {
@@ -707,13 +769,8 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
             };
 
             const gop = try seen.getOrPut(name);
-            if (gop.found_existing) {
-                gop.value_ptr.* += 1;
-            } else {
-                gop.value_ptr.* = 0;
-            }
             const uniq_name = if (gop.found_existing and kind != .func) name: {
-                const new_name = try std.fmt.allocPrint(gpa, "{s}__{d}", .{ name, gop.value_ptr.* });
+                const new_name = try std.fmt.allocPrint(gpa, "{s}__{d}", .{ name, i });
                 gpa.free(name);
                 break :name new_name;
             } else name;
@@ -776,7 +833,7 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
                 const name = std.mem.sliceTo(c.btf__name_by_offset(btf, t.name_off), 0);
 
                 if (kind != .func or seen.contains(name)) continue;
-                try seen.put(name, 0);
+                try seen.put(name, {});
 
                 dprint("{} {s}:", .{ i, @tagName(kind) });
                 defer dprint("\n", .{});
@@ -885,7 +942,7 @@ test "dup name" {
     defer gpa.free(got);
     const expect =
         \\pub const foo = u8;
-        \\pub const foo__1 = i32;
+        \\pub const foo__2 = i32;
         \\
     ;
     try std.testing.expectEqualStrings(expect, got);
@@ -1178,9 +1235,9 @@ test "struct" {
     const expect =
         \\pub const foo = u32;
         \\pub const ptr_to_foo = ?[*]foo;
-        \\pub const bar = struct {
-        \\    f1: foo,
-        \\    field1: ptr_to_foo,
+        \\pub const bar = extern struct {
+        \\    f1: foo align(1),
+        \\    field1: ptr_to_foo align(1),
         \\};
         \\
     ;
@@ -1199,34 +1256,7 @@ test "empty struct" {
     const got = try translate(gpa, btf);
     defer gpa.free(got);
     const expect =
-        \\pub const bar = packed struct {};
-        \\
-    ;
-    try std.testing.expectEqualStrings(expect, got);
-    try verify_generated(got, gpa);
-}
-
-test "packed struct" {
-    const gpa = std.testing.allocator;
-    const btf = c.btf__new_empty();
-    assert(c.libbpf_get_error(btf) == 0);
-    defer c.btf__free(btf);
-
-    const t = c.btf__add_int(btf, "foo", 4, 0);
-    assert(t > 0);
-    assert(c.btf__add_struct(btf, "bar", 8) > 0);
-    assert(c.btf__add_field(btf, "f1", t, 0, 1) == 0);
-    assert(c.btf__add_field(btf, "f2", t, 3, 3) == 0);
-
-    const got = try translate(gpa, btf);
-    defer gpa.free(got);
-    const expect =
-        \\pub const foo = u32;
-        \\pub const bar = packed struct {
-        \\    f1: u1,
-        \\    _zig_pad1: u2,
-        \\    f2: u3,
-        \\};
+        \\pub const bar = extern struct {};
         \\
     ;
     try std.testing.expectEqualStrings(expect, got);
@@ -1255,9 +1285,9 @@ test "ptr loop" {
     const expect =
         \\pub const foo = u32;
         \\pub const ptr_to_bar = ?[*]bar;
-        \\pub const bar = struct {
-        \\    f1: foo,
-        \\    f2: ptr_to_bar,
+        \\pub const bar = extern struct {
+        \\    f1: foo align(1),
+        \\    f2: ptr_to_bar align(1),
         \\};
         \\
     ;
@@ -1284,9 +1314,9 @@ test "union" {
     const expect =
         \\pub const foo = u32;
         \\pub const ptr_to_foo = ?[*]foo;
-        \\pub const bar = union {
-        \\    f1: foo,
-        \\    field1: ptr_to_foo,
+        \\pub const bar = extern union {
+        \\    f1: foo align(1),
+        \\    field1: ptr_to_foo align(1),
         \\};
         \\
     ;
@@ -1305,7 +1335,7 @@ test "empty union" {
     const got = try translate(gpa, btf);
     defer gpa.free(got);
     const expect =
-        \\pub const bar = union {};
+        \\pub const bar = extern union {};
         \\
     ;
     try std.testing.expectEqualStrings(expect, got);
@@ -1420,7 +1450,7 @@ test "restrict" {
     try verify_generated(got, gpa);
 }
 
-test "bitfield" {
+test "bitfields" {
     const gpa = std.testing.allocator;
     const btf = c.btf__new_empty();
     assert(c.libbpf_get_error(btf) == 0);
@@ -1440,12 +1470,12 @@ test "bitfield" {
     const expect =
         \\pub const foo = u32;
         \\pub const ptr_to_foo = ?[*]foo;
-        \\pub const bar = struct {
-        \\    f1: u1,
-        \\    _zig_pad1: u2,
-        \\    f2: u3,
-        \\    _zig_pad2: u26,
-        \\    f3: ptr_to_foo,
+        \\pub const bar = extern struct {
+        \\    _zig_merged_bitfieds_offset_0_8: u8,
+        \\    _zig_merged_bitfieds_offset_8_16: u8,
+        \\    _zig_merged_bitfieds_offset_16_24: u8,
+        \\    _zig_merged_bitfieds_offset_24_32: u8,
+        \\    f3: ptr_to_foo align(1),
         \\};
         \\
     ;
