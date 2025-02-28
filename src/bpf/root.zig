@@ -53,7 +53,7 @@ pub inline fn exit(comptime src: SourceLocation, ret: anytype) noreturn {
 /// ```
 /// Currently, it will only print the panic message in kernel's trace buffer
 /// and exit current bpf program.
-pub fn panic(msg: []const u8, error_return_trace: ?*StackTrace, ret_addr: ?usize) noreturn {
+pub inline fn panic(msg: []const u8, error_return_trace: ?*StackTrace, ret_addr: ?usize) noreturn {
     _ = error_return_trace;
     _ = ret_addr;
 
