@@ -49,13 +49,12 @@ test-11717   [005] d..21 10990692.273976: bpf_trace_printk: error occur at src/b
 ## Prerequisite
 
 - Make sure the linux kernel is built with `CONFIG_DEBUG_INFO_BTF=y`.
-- The only runtime library is `libc` (this is not even necessary if you build with musl-libc).
 
 ## Build
 
 - Download the [lastest Zig](https://ziglang.org/download/).
 - Clone this repostory.
-- Build with `zig build -Dbpf=/path/to/your/bpf/prog.zig -Dmain=/path/to/your/main.zig`.
+- Build with `zig build zbpf -Dbpf=/path/to/your/bpf/prog.zig -Dmain=/path/to/your/main.zig`.
 
 For cross-compiling, you could specify the target with `-Dtarget=<target>`,
 the list of all supported targets could be retrieved by `zig targets`.
