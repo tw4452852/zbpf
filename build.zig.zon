@@ -1,5 +1,5 @@
 .{
-    .name = "zbpf",
+    .name = .zbpf,
     .version = "0.3.0",
     .paths = .{""},
     .dependencies = .{
@@ -12,4 +12,5 @@
             .hash = "1220cbe3364fe97ec8d3704d0d30b69418ae955a776f43cc54e5471b4d3d44baeabb",
         },
     },
+    .fingerprint = 0xe57b3d31e4ca8d47,
 }
