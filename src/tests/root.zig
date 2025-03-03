@@ -1,12 +1,13 @@
 const std = @import("std");
 pub const allocator = std.testing.allocator;
+
+const build_options = @import("@build_options");
+
 pub const libbpf = @cImport({
     @cInclude("libbpf.h");
     @cInclude("bpf.h");
     @cInclude("btf.h");
 });
-const build_options = @import("@build_options");
-
 pub fn dbg_printf(level: libbpf.libbpf_print_level, fmt: [*c]const u8, args: @typeInfo(@typeInfo(@typeInfo(libbpf.libbpf_print_fn_t).optional.child).pointer.child).@"fn".params[2].type.?) callconv(.C) c_int {
     if (!build_options.debug and level == libbpf.LIBBPF_DEBUG) return 0;
 
@@ -63,6 +64,7 @@ test {
     _ = @import("kmulprobe.zig");
     _ = @import("ksyscall.zig");
     _ = @import("xdp_ping.zig");
+    _ = @import("tc_ingress.zig");
     _ = @import("kfunc.zig");
     _ = @import("stacktrace.zig");
     _ = @import("uprobe.zig");
