@@ -68,6 +68,7 @@ pub fn Arg(comptime name: []const u8, comptime kind: build_options.Kind) type {
             @setEvalBranchQuota(1000000);
             // trim trailing placeholder if any
             const slash = comptime std.mem.lastIndexOfScalar(u8, specifier, '/');
+            const want_pointer = if (slash) |si| std.mem.eql(u8, specifier[si + 1 ..], "*") else false;
             comptime var it = std.mem.tokenizeScalar(u8, specifier[0..if (slash) |si| si else specifier.len], '.');
             const argN = comptime it.next().?;
             comptime var FT: type = @TypeOf(@field(F.Ctx(), argN)(@ptrFromInt(1)));
@@ -102,7 +103,7 @@ pub fn Arg(comptime name: []const u8, comptime kind: build_options.Kind) type {
                 // if pointee isn't unknown sized, return pointee, otherwise return pointer itself
                 if (bpf.Args.is_pointer(FT)) {
                     const pointee = bpf.Args.deref_pointer(FT);
-                    if (@typeInfo(pointee) != .@"opaque") break :blk pointee;
+                    if (!want_pointer and @typeInfo(pointee) != .@"opaque") break :blk pointee;
                 }
                 break :blk FT;
             };
