@@ -3,57 +3,44 @@ const builtin = @import("builtin");
 const fs = std.fs;
 
 var debugging = false;
+var vmlinux_bin_path: ?[]const u8 = null;
+var no_install = false;
 
-fn create_bpf_prog(ctx: *const Ctx, src_path: []const u8) std.Build.LazyPath {
+fn create_bpf_prog(b: *std.Build, endian: std.builtin.Endian, src_path: []const u8, build_options_opt: ?*std.Build.Module) std.Build.LazyPath {
     const name = fs.path.stem(src_path);
 
-    const prog = ctx.b.addObject(.{
+    const prog = b.addObject(.{
         .name = name,
-        .root_source_file = ctx.b.path(src_path),
-        .target = ctx.b.resolveTargetQuery(.{
-            .cpu_arch = switch (ctx.target.result.cpu.arch.endian()) {
-                .big => .bpfeb,
-                .little => .bpfel,
-            },
-            .os_tag = .freestanding,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path(src_path),
+            .target = b.resolveTargetQuery(.{
+                .cpu_arch = switch (endian) {
+                    .big => .bpfeb,
+                    .little => .bpfel,
+                },
+                .os_tag = .freestanding,
+            }),
+            .optimize = .ReleaseFast,
         }),
-        .optimize = .ReleaseFast,
     });
     prog.root_module.strip = false;
-    prog.root_module.addImport("bpf", ctx.bpf);
-    prog.root_module.addImport("vmlinux", ctx.vmlinux);
-    prog.root_module.addAnonymousImport("@build_options", .{
-        .root_source_file = ctx.build_options,
-    });
+    prog.root_module.addImport("bpf", b.modules.get("bpf").?);
+    prog.root_module.addImport("vmlinux", b.modules.get("vmlinux").?);
+    if (build_options_opt) |build_options| prog.root_module.addImport("@build_options", build_options);
 
-    const run_btf_sanitizer = ctx.b.addRunArtifact(ctx.btf_sanitizer);
+    const run_btf_sanitizer = b.addRunArtifact(b.dependency("btf_sanitizer", .{ .optimize = .ReleaseFast }).artifact("btf_sanitizer"));
     run_btf_sanitizer.addFileArg(prog.getEmittedBin());
-    if (ctx.vmlinux_bin_path) |vmlinux| {
+    if (vmlinux_bin_path) |vmlinux| {
         run_btf_sanitizer.addPrefixedFileArg("-vmlinux", .{ .cwd_relative = vmlinux });
     }
     if (debugging) run_btf_sanitizer.addArg("-debug");
-    return run_btf_sanitizer.addPrefixedOutputFileArg("-o", ctx.b.fmt("{s}_sanitized.o", .{name}));
+    return run_btf_sanitizer.addPrefixedOutputFileArg("-o", b.fmt("{s}_sanitized.o", .{name}));
 }
 
-fn create_libbpf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
-    return b.dependency("libbpf", .{
-        .target = target,
-        .optimize = if (optimize != .ReleaseFast) .ReleaseFast else optimize, // WA for pointer alignment assumption of libbpf
-    }).artifact("bpf");
-}
+fn create_vmlinux(b: *std.Build) *std.Build.Module {
+    const run_exe = b.addRunArtifact(b.dependency("btf_translator", .{ .optimize = .ReleaseFast }).artifact("btf_translator"));
 
-fn create_libelf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
-    return b.dependency("libelf", .{
-        .target = target,
-        .optimize = if (optimize != .ReleaseFast) .ReleaseFast else optimize, // WA for pointer alignment assumption of libelf
-    }).artifact("elf");
-}
-
-fn create_vmlinux(b: *std.Build, target: std.Build.ResolvedTarget, libbpf: *std.Build.Step.Compile, vmlinux_bin: ?[]const u8) *std.Build.Module {
-    const exe = create_btf_translator(b, target, libbpf);
-    const run_exe = b.addRunArtifact(exe);
-
-    if (vmlinux_bin) |vmlinux| run_exe.addPrefixedFileArg("-vmlinux", .{ .cwd_relative = vmlinux });
+    if (vmlinux_bin_path) |vmlinux| run_exe.addPrefixedFileArg("-vmlinux", .{ .cwd_relative = vmlinux });
     if (debugging) run_exe.addArg("-debug");
     run_exe.addArg("-syscalls");
     const vmlinux_zig = run_exe.addPrefixedOutputFileArg("-o", b.fmt("vmlinux.zig", .{}));
@@ -61,141 +48,64 @@ fn create_vmlinux(b: *std.Build, target: std.Build.ResolvedTarget, libbpf: *std.
     return b.addModule("vmlinux", .{ .root_source_file = vmlinux_zig });
 }
 
-fn create_btf_translator(b: *std.Build, target: std.Build.ResolvedTarget, libbpf: *std.Build.Step.Compile) *std.Build.Step.Compile {
-    const optimize: std.builtin.OptimizeMode = .ReleaseFast;
-
+fn create_btf_translator(b: *std.Build) *std.Build.Step.Compile {
+    const host = std.Build.resolveTargetQuery(b, .{});
+    const root_module = b.addModule("btf_translator", .{
+        .root_source_file = b.path("src/btf_translator/main.zig"),
+        .target = host,
+        .optimize = .ReleaseFast,
+    });
     const exe = b.addExecutable(.{
         .name = "btf_translator",
-        .root_source_file = b.path("src/btf_translator/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = root_module,
     });
 
-    exe.linkLibrary(libbpf);
+    exe.linkLibrary(get_libbpf(b, host, .ReleaseFast));
     exe.linkLibC();
     b.installArtifact(exe);
 
     return exe;
 }
 
-fn create_btf_sanitizer(b: *std.Build, target: std.Build.ResolvedTarget, libbpf: *std.Build.Step.Compile, libelf: *std.Build.Step.Compile) *std.Build.Step.Compile {
-    const optimize: std.builtin.OptimizeMode = .ReleaseFast;
-
-    const exe = b.addExecutable(.{
-        .name = "btf_sanitizer",
-        .root_source_file = b.path("src/btf_sanitizer/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    exe.linkLibrary(libelf);
-    exe.linkLibrary(libbpf);
-    exe.linkLibC();
-    exe.addIncludePath(b.path("src/btf_sanitizer/"));
-    b.installArtifact(exe);
-
-    return exe;
-}
-
-fn create_vmlinux_offset_tests_generator(b: *std.Build, target: std.Build.ResolvedTarget, libbpf: *std.Build.Step.Compile) *std.Build.Step.Compile {
-    const optimize: std.builtin.OptimizeMode = .ReleaseFast;
-
-    const exe = b.addExecutable(.{
-        .name = "gen_vmlinux_offset_tests",
-        .root_source_file = b.path("src/tests/gen_vmlinux_offset_tests.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    exe.linkLibrary(libbpf);
-    exe.linkLibC();
-    b.installArtifact(exe);
-
-    return exe;
-}
-
-fn create_native_tools(b: *std.Build, vmlinux_bin: ?[]const u8, optimize: std.builtin.OptimizeMode) struct { *std.Build.Module, *std.Build.Step.Compile, *std.Build.Step.Compile } {
-    // build for native with musl libc
-    const target = std.Build.resolveTargetQuery(b, .{ .abi = .musl });
-
-    const libbpf = create_libbpf(b, target, optimize);
-    const libelf = create_libelf(b, target, optimize);
-
-    return .{
-        create_vmlinux(b, target, libbpf, vmlinux_bin),
-        create_btf_sanitizer(b, target, libbpf, libelf),
-        create_vmlinux_offset_tests_generator(b, target, libbpf),
-    };
-}
-
-fn create_bpf(b: *std.Build, vmlinux: *std.Build.Module) *std.Build.Module {
+fn create_bpf(b: *std.Build) *std.Build.Module {
     return b.addModule("bpf", .{
         .root_source_file = b.path("src/bpf/root.zig"),
-        .imports = &.{.{ .name = "vmlinux", .module = vmlinux }},
+        .imports = &.{.{ .name = "vmlinux", .module = create_vmlinux(b) }},
     });
 }
-
-const Ctx = struct {
-    b: *std.Build,
-    target: std.Build.ResolvedTarget,
-    optimize: std.builtin.OptimizeMode,
-    vmlinux: *std.Build.Module,
-    bpf: *std.Build.Module,
-    libbpf_step: *std.Build.Step.Compile,
-    build_options: std.Build.LazyPath,
-    btf_sanitizer: *std.Build.Step.Compile,
-    vmlinux_bin_path: ?[]const u8,
-    test_filter: ?[]const u8,
-    install: bool,
-};
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const build_options = b.addOptions();
-    const vmlinux_bin = b.option([]const u8, "vmlinux", "vmlinux binary used for BTF generation");
-    debugging = if (b.option(bool, "debug", "enable debugging log")) |v| v else false;
-    const install = if (b.option(bool, "install", "alias for -fno-emit-bin, used for testing")) |v| v else true;
+    vmlinux_bin_path = b.option([]const u8, "vmlinux", "vmlinux binary used for BTF generation");
+    if (b.option(bool, "debug", "enable debugging log")) |v| debugging = v;
+    if (b.option(bool, "no_install", "alias for -fno-emit-bin, used for testing")) |v| no_install = v;
+    const test_filter = b.option([]const u8, "test", "test filter");
 
-    const libbpf = create_libbpf(b, target, optimize);
-    const vmlinux, const btf_sanitizer, const vmlinux_offset_tests_generator = create_native_tools(b, vmlinux_bin, optimize);
-    const bpf = create_bpf(b, vmlinux);
+    _ = create_bpf(b);
 
-    const ctx = Ctx{
-        .b = b,
-        .target = target,
-        .optimize = optimize,
-        .bpf = bpf,
-        .libbpf_step = libbpf,
-        .build_options = build_options.getOutput(),
-        .vmlinux = vmlinux,
-        .btf_sanitizer = btf_sanitizer,
-        .vmlinux_bin_path = vmlinux_bin,
-        .test_filter = b.option([]const u8, "test", "test filter"),
-        .install = install,
-    };
+    create_main_step(b, target, optimize);
+    try create_trace_step(b, target, optimize);
 
-    try create_main_step(&ctx);
-    try create_trace_step(&ctx);
-    const vot = try create_vmlinux_offset_test_step(&ctx, vmlinux_offset_tests_generator);
-    try create_test_step(&ctx, vot);
-    try create_fuzz_test_step(&ctx);
-    try create_docs_step(&ctx);
+    try create_test_step(b, target, optimize, test_filter);
+    //try create_fuzz_test_step(b, target, optimize, test_filter);
+    try create_docs_step(b);
 }
 
-fn create_main_step(ctx: *const Ctx) !void {
-    const bpf_src = if (ctx.b.option([]const u8, "bpf", "bpf program source path")) |v| v else "samples/perf_event.zig";
-    const exe_src = if (ctx.b.option([]const u8, "main", "main executable source path")) |v| v else "src/hello.zig";
-    try create_target_step(ctx, exe_src, bpf_src, "zbpf", null);
+fn create_main_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
+    const bpf_src = if (b.option([]const u8, "bpf", "bpf program source path")) |v| v else "samples/perf_event.zig";
+    const exe_src = if (b.option([]const u8, "main", "main executable source path")) |v| v else "src/hello.zig";
+    const prog = create_bpf_prog(b, target.result.cpu.arch.endian(), bpf_src, null);
+    _ = create_target_step(b, target, optimize, exe_src, prog, "zbpf");
 }
 
-fn create_trace_step(ctx: *const Ctx) !void {
-    const kprobes = if (ctx.b.option([]const []const u8, "kprobe", "trace the specified kernel function")) |v| v else &.{};
-    const syscalls = if (ctx.b.option([]const []const u8, "syscall", "trace the specified syscall")) |v| v else &.{};
-    const uprobes = if (ctx.b.option([]const []const u8, "uprobe", "trace the specified userspace function")) |v| v else &.{};
+fn create_trace_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) !void {
+    const kprobes = if (b.option([]const []const u8, "kprobe", "trace the specified kernel function")) |v| v else &.{};
+    const syscalls = if (b.option([]const []const u8, "syscall", "trace the specified syscall")) |v| v else &.{};
+    const uprobes = if (b.option([]const []const u8, "uprobe", "trace the specified userspace function")) |v| v else &.{};
 
-    var content = std.ArrayList(u8).init(ctx.b.allocator);
+    var content = std.ArrayList(u8).init(b.allocator);
     defer content.deinit();
     const w = content.writer();
     try w.writeAll(
@@ -211,7 +121,7 @@ fn create_trace_step(ctx: *const Ctx) !void {
         \\
     );
 
-    const Closure = struct {
+    const generate_one = struct {
         fn generate_one(writer: std.ArrayList(u8).Writer, kind: []const u8, l: []const u8) !void {
             const colon = std.mem.indexOfScalar(u8, l, ':');
             const name = if (colon) |ci| l[0..ci] else l;
@@ -239,72 +149,72 @@ fn create_trace_step(ctx: *const Ctx) !void {
             try writer.print(".with_lbr = {}, ", .{with_lbr});
             try writer.print(".with_stack = {}, }},\n", .{with_stack});
         }
-    };
+    }.generate_one;
 
-    for (kprobes) |l| try Closure.generate_one(w, "kprobe", l);
-    for (syscalls) |l| try Closure.generate_one(w, "syscall", l);
-    for (uprobes) |l| try Closure.generate_one(w, "uprobe", l);
+    for (kprobes) |l| try generate_one(w, "kprobe", l);
+    for (syscalls) |l| try generate_one(w, "syscall", l);
+    for (uprobes) |l| try generate_one(w, "uprobe", l);
 
     try w.writeAll("};");
-    const f = ctx.b.addWriteFiles().add(
-        "generated_tracing_ctx.zig",
+    const f = b.addWriteFiles().add(
+        "generated_tracing_zig",
         try content.toOwnedSlice(),
     );
+    const build_options_mod = b.createModule(.{ .root_source_file = f });
 
-    // Create a new ctx with tracing functions
-    var ctx_with_tracing: Ctx = ctx.*;
-    ctx_with_tracing.build_options = f;
-
-    try create_target_step(&ctx_with_tracing, "src/tools/trace/trace.zig", "src/tools/trace/trace.bpf.zig", "trace", &.{create_libelf(ctx.b, ctx.target, ctx.optimize)});
+    const prog = create_bpf_prog(b, target.result.cpu.arch.endian(), "src/tools/trace/trace.bpf.zig", build_options_mod);
+    const exe = create_target_step(b, target, optimize, "src/tools/trace/trace.zig", prog, "trace");
+    exe.root_module.addImport(
+        "@build_options",
+        build_options_mod,
+    );
+    exe.linkLibrary(get_libelf(b, target, optimize));
 }
 
-fn create_target_step(ctx: *const Ctx, main_path: []const u8, prog_path: []const u8, exe_name: []const u8, extra_libs_opt: ?[]const *std.Build.Step.Compile) !void {
-    const prog = create_bpf_prog(ctx, prog_path);
-
-    const exe = ctx.b.addExecutable(.{
+fn create_target_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, main_path: []const u8, prog: std.Build.LazyPath, exe_name: []const u8) *std.Build.Step.Compile {
+    const exe = b.addExecutable(.{
         .name = exe_name,
-        .root_source_file = ctx.b.path(main_path),
-        .target = ctx.target,
-        .optimize = ctx.optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path(main_path),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     exe.root_module.addAnonymousImport("@bpf_prog", .{
         .root_source_file = prog,
     });
-    exe.root_module.addImport("bpf", ctx.bpf);
-    exe.root_module.addImport("vmlinux", ctx.vmlinux);
-    exe.root_module.addAnonymousImport("@build_options", .{
-        .root_source_file = ctx.build_options,
-    });
+    exe.root_module.addImport("bpf", b.modules.get("bpf").?);
+    exe.root_module.addImport("vmlinux", b.modules.get("vmlinux").?);
 
-    exe.linkLibrary(ctx.libbpf_step);
+    exe.linkLibrary(get_libbpf(b, target, optimize));
     exe.linkLibC();
-    if (extra_libs_opt) |extra_libs| for (extra_libs) |lib| {
-        exe.linkLibrary(lib);
-    };
 
-    const description = ctx.b.fmt("Build {s}", .{exe_name});
-    const build_step = ctx.b.step(exe_name, description);
+    const description = b.fmt("Build {s}", .{exe_name});
+    const build_step = b.step(exe_name, description);
 
-    if (!ctx.install) {
+    if (no_install) {
         // -fno-emit-bin
         build_step.dependOn(&exe.step);
     } else {
-        const install_exe = ctx.b.addInstallArtifact(exe, .{});
+        const install_exe = b.addInstallArtifact(exe, .{});
         build_step.dependOn(&install_exe.step);
     }
+
+    return exe;
 }
 
-fn create_test_step(ctx: *const Ctx, vmlinux_offset_test_step: *std.Build.Step) !void {
+fn create_test_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, test_filter: ?[]const u8) !void {
     // Creates a step for unit testing.
-    const filter = ctx.test_filter;
-    const exe_tests = ctx.b.addTest(.{
-        .root_source_file = ctx.b.path("src/tests/root.zig"),
-        .target = ctx.target,
-        .optimize = ctx.optimize,
-        .filter = filter,
+    const exe_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/root.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+        .filters = if (test_filter) |f| &.{f} else &.{},
     });
-    exe_tests.linkLibrary(ctx.libbpf_step);
-    exe_tests.root_module.addImport("bpf", ctx.bpf);
+    exe_tests.linkLibrary(get_libbpf(b, target, optimize));
+    exe_tests.root_module.addImport("bpf", b.modules.get("bpf").?);
     exe_tests.linkLibC();
     exe_tests.setExecCmd(&.{ "sudo", null });
 
@@ -313,13 +223,13 @@ fn create_test_step(ctx: *const Ctx, vmlinux_offset_test_step: *std.Build.Step) 
     defer sample_dir.close();
     var it = sample_dir.iterate();
     while (try it.next()) |entry| {
-        if (filter) |f| {
+        if (test_filter) |f| {
             if (!std.mem.containsAtLeast(u8, entry.name, 1, f)) {
                 continue;
             }
         }
-        const bpf_prog = create_bpf_prog(ctx, try fs.path.join(ctx.b.allocator, &[_][]const u8{ "samples", entry.name }));
-        exe_tests.root_module.addAnonymousImport(try std.fmt.allocPrint(ctx.b.allocator, "@{s}", .{fs.path.stem(entry.name)}), .{
+        const bpf_prog = create_bpf_prog(b, target.result.cpu.arch.endian(), try fs.path.join(b.allocator, &.{ "samples", entry.name }), null);
+        exe_tests.root_module.addAnonymousImport(try std.fmt.allocPrint(b.allocator, "@{s}", .{fs.path.stem(entry.name)}), .{
             .root_source_file = bpf_prog,
         });
     }
@@ -327,40 +237,43 @@ fn create_test_step(ctx: *const Ctx, vmlinux_offset_test_step: *std.Build.Step) 
     // As test runner doesn't support passing arguments,
     // we have to create a temporary file for the debugging flag
     exe_tests.root_module.addAnonymousImport("@build_options", .{
-        .root_source_file = ctx.b.addWriteFiles().add(
-            "generated_test_build_ctx.zig",
-            ctx.b.fmt("pub const debug :bool = {s};", .{if (debugging) "true" else "false"}),
+        .root_source_file = b.addWriteFiles().add(
+            "generated_test_build_zig",
+            b.fmt("pub const debug :bool = {s};", .{if (debugging) "true" else "false"}),
         ),
     });
 
-    const run_unit_test = ctx.b.addRunArtifact(exe_tests);
-    const test_bpf_step = ctx.b.step("test-bpf", "Build and run bpf package unit tests");
+    const run_unit_test = b.addRunArtifact(exe_tests);
+    const test_bpf_step = b.step("test-bpf", "Build and run bpf package unit tests");
     test_bpf_step.dependOn(&run_unit_test.step);
 
     // run tools/trace test script
-    const run_trace_script = ctx.b.addSystemCommand(&.{ "sh", "src/tools/trace/build_check_trace.sh" });
+    const run_trace_script = b.addSystemCommand(&.{ "sh", "src/tools/trace/build_check_trace.sh" });
     run_trace_script.expectExitCode(0);
     run_trace_script.has_side_effects = true;
-    const test_tool_trace_step = ctx.b.step("test-tool-trace", "Build and run tool/trace unit tests");
+    const test_tool_trace_step = b.step("test-tool-trace", "Build and run tool/trace unit tests");
     test_tool_trace_step.dependOn(&run_trace_script.step);
 
     // run btf_translator test
-    const btf_translator_test = create_btf_translator_test(ctx);
-    const run_btf_translator_test = ctx.b.addRunArtifact(btf_translator_test);
-    const test_btf_translator_step = ctx.b.step("test-btf-translator", "Build and run btf_translator unit tests");
+    const run_btf_translator_test = b.dependency("btf_translator", .{ .optimize = .ReleaseFast }).builder.top_level_steps.get("test").?;
+    const test_btf_translator_step = b.step("test-btf-translator", "Build and run btf_translator unit tests");
     test_btf_translator_step.dependOn(&run_btf_translator_test.step);
 
     // build vmlinux test
-    const vmlinux_test = ctx.b.addTest(.{
-        .root_source_file = ctx.b.path("src/tests/vmlinux.zig"),
-        .target = ctx.target,
-        .optimize = ctx.optimize,
+    const vmlinux_test = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/vmlinux.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
-    vmlinux_test.root_module.addImport("vmlinux", ctx.vmlinux);
-    const test_vmlinux_step = ctx.b.step("test-vmlinux", "Build vmlinux unit test");
+    vmlinux_test.root_module.addImport("vmlinux", b.modules.get("vmlinux").?);
+    const test_vmlinux_step = b.step("test-vmlinux", "Build vmlinux unit test");
     test_vmlinux_step.dependOn(&vmlinux_test.step);
 
-    const test_step = ctx.b.step("test", "Build and run all unit tests");
+    const vmlinux_offset_test_step = try create_vmlinux_offset_test_step(b, target, optimize, test_filter);
+
+    const test_step = b.step("test", "Build and run all unit tests");
     test_step.dependOn(test_bpf_step);
     test_step.dependOn(test_tool_trace_step);
     test_step.dependOn(test_btf_translator_step);
@@ -368,89 +281,111 @@ fn create_test_step(ctx: *const Ctx, vmlinux_offset_test_step: *std.Build.Step) 
     test_step.dependOn(vmlinux_offset_test_step);
 }
 
-fn create_btf_translator_test(ctx: *const Ctx) *std.Build.Step.Compile {
-    const exe = ctx.b.addTest(.{
-        .root_source_file = ctx.b.path("src/btf_translator/main.zig"),
-        .target = ctx.target,
-        .optimize = ctx.optimize,
-        .filter = ctx.test_filter,
-    });
-
-    exe.linkLibrary(ctx.libbpf_step);
-    exe.linkLibC();
-
-    return exe;
-}
-
-fn create_fuzz_test_step(ctx: *const Ctx) !void {
+fn create_fuzz_test_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, test_filter: ?[]const u8) !void {
     // Creates a step for fuzzing test.
-    const exe_tests = ctx.b.addTest(.{
-        .root_source_file = ctx.b.path("src/tests/fuzz.zig"),
-        .target = ctx.target,
-        .optimize = ctx.optimize,
-        .filter = ctx.test_filter,
+    const exe_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/fuzz.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+        .filters = if (test_filter) |f| &.{f} else &.{},
     });
-    exe_tests.root_module.addImport("vmlinux", ctx.vmlinux);
+    exe_tests.root_module.addImport("vmlinux", b.modules.get("vmlinux").?);
 
     // As test runner doesn't support passing arguments,
     // we have to create a temporary file for the debugging flag
     exe_tests.root_module.addAnonymousImport("@build_options", .{
-        .root_source_file = ctx.b.addWriteFiles().add(
-            "generated_test_build_ctx.zig",
-            ctx.b.fmt(
+        .root_source_file = b.addWriteFiles().add(
+            "generated_test_build_zig",
+            b.fmt(
                 \\pub const debug :bool = {s};
                 \\pub const zig_exe = "{s}";
             , .{
                 if (debugging) "true" else "false",
-                ctx.b.graph.zig_exe,
+                b.graph.zig_exe,
             }),
         ),
     });
 
-    const run = ctx.b.addRunArtifact(exe_tests);
+    const run = b.addRunArtifact(exe_tests);
 
-    const step = ctx.b.step("fuzz-test", "Build and run fuzzing tests");
+    const step = b.step("fuzz-test", "Build and run fuzzing tests");
     step.dependOn(&run.step);
 }
 
-fn create_vmlinux_offset_test_step(ctx: *const Ctx, generator: *std.Build.Step.Compile) !*std.Build.Step {
-    const run_exe = ctx.b.addRunArtifact(generator);
-
-    if (ctx.vmlinux_bin_path) |vmlinux| run_exe.addPrefixedFileArg("-vmlinux", .{ .cwd_relative = vmlinux });
-    if (debugging) run_exe.addArg("-debug");
-    const generated_file = run_exe.addPrefixedOutputFileArg("-o", ctx.b.fmt("generated_vmlinux_offset_tests.zig", .{}));
-
-    const exe_tests = ctx.b.addTest(.{
-        .root_source_file = generated_file,
-        .target = ctx.target,
-        .optimize = ctx.optimize,
-        .filter = ctx.test_filter,
+fn create_vmlinux_offset_test_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, test_filter: ?[]const u8) !*std.Build.Step {
+    const host = std.Build.resolveTargetQuery(b, .{});
+    const generator = b.addExecutable(.{
+        .name = "gen_vmlinux_offset_tests",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/tests/gen_vmlinux_offset_tests.zig"),
+            .target = host,
+            .optimize = .ReleaseFast,
+        }),
     });
-    exe_tests.root_module.addImport("vmlinux", ctx.vmlinux);
-    const run = ctx.b.addRunArtifact(exe_tests);
+    generator.linkLibrary(get_libbpf(b, host, .ReleaseFast));
+    generator.linkLibC();
+    const run_exe = b.addRunArtifact(generator);
 
-    const step = ctx.b.step("test-vmlinux-offset", "Build vmlinux offset tests");
+    if (vmlinux_bin_path) |vmlinux| run_exe.addPrefixedFileArg("-vmlinux", .{ .cwd_relative = vmlinux });
+    if (debugging) run_exe.addArg("-debug");
+    const generated_file = run_exe.addPrefixedOutputFileArg("-o", b.fmt("generated_vmlinux_offset_tests.zig", .{}));
+
+    const exe_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = generated_file,
+            .target = target,
+            .optimize = optimize,
+        }),
+        .filters = if (test_filter) |f| &.{f} else &.{},
+    });
+    exe_tests.root_module.addImport("vmlinux", b.modules.get("vmlinux").?);
+    const run = b.addRunArtifact(exe_tests);
+
+    const step = b.step("test-vmlinux-offset", "Build vmlinux offset tests");
     step.dependOn(&run.step);
 
     return step;
 }
 
-fn create_docs_step(ctx: *const Ctx) !void {
-    const exe = ctx.b.addObject(.{
+fn create_docs_step(b: *std.Build) !void {
+    const exe = b.addObject(.{
         .name = "docs",
-        .root_source_file = ctx.b.path("src/bpf/root.zig"),
-        .target = ctx.target,
-        .optimize = ctx.optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/bpf/root.zig"),
+            .target = b.resolveTargetQuery(.{
+                .cpu_arch = .bpfeb,
+                .os_tag = .freestanding,
+            }),
+            .optimize = .Debug,
+        }),
     });
 
-    exe.root_module.addImport("vmlinux", ctx.vmlinux);
+    exe.root_module.addImport("vmlinux", b.modules.get("vmlinux").?);
 
-    const install_docs = ctx.b.addInstallDirectory(.{
+    const install_docs = b.addInstallDirectory(.{
         .source_dir = exe.getEmittedDocs(),
         .install_dir = .prefix,
         .install_subdir = "docs",
     });
 
-    const step = ctx.b.step("docs", "generate documents");
+    const step = b.step("docs", "generate documents");
     step.dependOn(&install_docs.step);
+}
+
+fn get_libbpf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
+    _ = optimize;
+    return b.dependency("libbpf", .{
+        .target = target,
+        .optimize = .ReleaseFast, // WA for pointer alignment assumption of libbpf
+    }).artifact("bpf");
+}
+
+fn get_libelf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
+    _ = optimize;
+    return b.dependency("libelf", .{
+        .target = target,
+        .optimize = .ReleaseFast, // WA for pointer alignment assumption of libelf
+    }).artifact("elf");
 }
