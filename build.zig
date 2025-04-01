@@ -249,6 +249,7 @@ fn create_test_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: s
 
     // run tools/trace test script
     const run_trace_script = b.addSystemCommand(&.{ "sh", "src/tools/trace/build_check_trace.sh" });
+    run_trace_script.setEnvironmentVariable("zig", b.graph.zig_exe);
     run_trace_script.expectExitCode(0);
     run_trace_script.has_side_effects = true;
     const test_tool_trace_step = b.step("test-tool-trace", "Build and run tool/trace unit tests");

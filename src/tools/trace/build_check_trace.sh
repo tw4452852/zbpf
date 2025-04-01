@@ -1,7 +1,9 @@
 #!/bin/bash
 set -e
 
-zig build trace \
+: ${zig:=zig}
+
+$zig build trace \
   -Dsyscall=unlinkat:arg1,ret \
   -Dkprobe=do_unlinkat:arg0,arg1,arg1.name,ret \
   -Dkprobe=do_rmdir:arg0,ret,stack \
