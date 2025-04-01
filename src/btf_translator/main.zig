@@ -63,15 +63,18 @@ pub fn main() !void {
 
 const Allocator = std.mem.Allocator;
 const NodeIndex = std.zig.Ast.Node.Index;
+const NodeOptionalIndex = std.zig.Ast.Node.OptionalIndex;
 const NodeSubRange = std.zig.Ast.Node.SubRange;
 const TokenIndex = std.zig.Ast.TokenIndex;
+const TokenOptionalIndex = std.zig.Ast.OptionalTokenIndex;
 const TokenTag = std.zig.Token.Tag;
+const ExtraIndex = std.zig.Ast.ExtraIndex;
 
 const Context = struct {
     gpa: Allocator,
     buf: std.ArrayList(u8),
     nodes: std.zig.Ast.NodeList = .{},
-    extra_data: std.ArrayListUnmanaged(std.zig.Ast.Node.Index) = .empty,
+    extra_data: std.ArrayListUnmanaged(u32) = .empty,
     tokens: std.zig.Ast.TokenList = .{},
 
     fn addTokenFmt(ctx: *Context, tag: TokenTag, comptime format: []const u8, args: anytype) Allocator.Error!TokenIndex {
@@ -83,7 +86,7 @@ const Context = struct {
             .start = @as(u32, @intCast(start_index)),
         });
 
-        return @as(u32, @intCast(ctx.tokens.len - 1));
+        return @intCast(ctx.tokens.len - 1);
     }
 
     fn addToken(ctx: *Context, tag: TokenTag, bytes: []const u8) Allocator.Error!TokenIndex {
@@ -97,26 +100,33 @@ const Context = struct {
     }
 
     fn listToSpan(ctx: *Context, list: []const NodeIndex) Allocator.Error!NodeSubRange {
-        try ctx.extra_data.appendSlice(ctx.gpa, list);
+        try ctx.extra_data.appendSlice(ctx.gpa, @ptrCast(list));
         return NodeSubRange{
-            .start = @as(NodeIndex, @intCast(ctx.extra_data.items.len - list.len)),
-            .end = @as(NodeIndex, @intCast(ctx.extra_data.items.len)),
+            .start = @enumFromInt(ctx.extra_data.items.len - list.len),
+            .end = @enumFromInt(ctx.extra_data.items.len),
         };
     }
 
     fn addNode(ctx: *Context, elem: std.zig.Ast.Node) Allocator.Error!NodeIndex {
-        const result = @as(NodeIndex, @intCast(ctx.nodes.len));
+        const result: NodeIndex = @enumFromInt(ctx.nodes.len);
         try ctx.nodes.append(ctx.gpa, elem);
         return result;
     }
 
-    fn addExtra(ctx: *Context, extra: anytype) Allocator.Error!NodeIndex {
+    fn addExtra(ctx: *Context, extra: anytype) Allocator.Error!ExtraIndex {
         const fields = std.meta.fields(@TypeOf(extra));
         try ctx.extra_data.ensureUnusedCapacity(ctx.gpa, fields.len);
-        const result = @as(u32, @intCast(ctx.extra_data.items.len));
+        const result: ExtraIndex = @enumFromInt(ctx.extra_data.items.len);
         inline for (fields) |field| {
-            comptime std.debug.assert(field.type == NodeIndex);
-            ctx.extra_data.appendAssumeCapacity(@field(extra, field.name));
+            switch (field.type) {
+                NodeIndex,
+                NodeOptionalIndex,
+                TokenIndex,
+                TokenOptionalIndex,
+                ExtraIndex,
+                => ctx.extra_data.appendAssumeCapacity(@intFromEnum(@field(extra, field.name))),
+                else => @compileError("unexpected field type"),
+            }
         }
         return result;
     }
@@ -178,10 +188,10 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                 break :blk try ctx.addNode(.{
                     .tag = .field_access,
                     .main_token = try ctx.addToken(.period, "."),
-                    .data = .{
-                        .lhs = funcs_field,
-                        .rhs = try ctx.addIdentifier(name),
-                    },
+                    .data = .{ .node_and_token = .{
+                        funcs_field,
+                        try ctx.addIdentifier(name),
+                    } },
                 });
             } else try ctx.addNode(.{
                 .tag = .identifier,
@@ -243,7 +253,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                 .tag = .optional_type,
                 .main_token = try ctx.addToken(.question_mark, "?"),
                 .data = .{
-                    .lhs = try ctx.addNode(.{
+                    .node = try ctx.addNode(.{
                         .tag = .ptr_type_aligned,
                         .main_token = if (pointee == 0 or pkind == .fwd)
                             try ctx.addToken(.asterisk, "*")
@@ -253,12 +263,11 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                             _ = try ctx.addToken(.r_bracket, "]");
                             break :mt res;
                         },
-                        .data = .{
-                            .lhs = 0,
-                            .rhs = try add_child_node(btf, pointee, names, ctx, chain),
-                        },
+                        .data = .{ .opt_node_and_node = .{
+                            .none,
+                            try add_child_node(btf, pointee, names, ctx, chain),
+                        } },
                     }),
-                    .rhs = undefined,
                 },
             });
         },
@@ -270,10 +279,10 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             break :blk try ctx.addNode(.{
                 .tag = .container_decl_two,
                 .main_token = opaque_tok,
-                .data = .{
-                    .lhs = 0,
-                    .rhs = 0,
-                },
+                .data = .{ .opt_node_and_opt_node = .{
+                    .none,
+                    .none,
+                } },
             });
         },
         .typedef, .@"volatile", .@"const", .restrict => blk: {
@@ -321,12 +330,11 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                     .tag = .negation,
                     .main_token = try ctx.addToken(.minus, "-"),
                     .data = .{
-                        .lhs = try ctx.addNode(.{
+                        .node = try ctx.addNode(.{
                             .tag = .number_literal,
                             .main_token = try ctx.addTokenFmt(.number_literal, "{}", .{abs_val}),
                             .data = undefined,
                         }),
-                        .rhs = undefined,
                     },
                 }) else try ctx.addNode(.{
                     .tag = .number_literal,
@@ -336,10 +344,10 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                 try members.append(try ctx.addNode(.{
                     .tag = .container_field_init,
                     .main_token = name_tok,
-                    .data = .{
-                        .lhs = 0,
-                        .rhs = init_tok,
-                    },
+                    .data = .{ .opt_node_and_opt_node = .{
+                        .none,
+                        init_tok.toOptional(),
+                    } },
                 }));
                 _ = try ctx.addToken(.comma, ",");
             }
@@ -349,10 +357,10 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             break :blk try ctx.addNode(.{
                 .tag = if (members.items.len == 0) .container_decl_arg else .container_decl_arg_trailing,
                 .main_token = enum_tok,
-                .data = .{
-                    .lhs = arg_node,
-                    .rhs = try ctx.addExtra(span),
-                },
+                .data = .{ .node_and_extra = .{
+                    arg_node,
+                    try ctx.addExtra(span),
+                } },
             });
         },
         .array => blk: {
@@ -378,10 +386,10 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             break :blk try ctx.addNode(.{
                 .tag = .array_type,
                 .main_token = l_bracket,
-                .data = .{
-                    .lhs = len_expr,
-                    .rhs = elem_type_expr,
-                },
+                .data = .{ .node_and_node = .{
+                    len_expr,
+                    elem_type_expr,
+                } },
             });
         },
         .@"struct" => blk: {
@@ -420,10 +428,10 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                     const ret = try _ctx.addNode(.{
                         .tag = .container_field_init,
                         .main_token = name_tok,
-                        .data = .{
-                            .lhs = type_expr,
-                            .rhs = 0,
-                        },
+                        .data = .{ .node_and_opt_node = .{
+                            type_expr,
+                            .none,
+                        } },
                     });
                     _ = try _ctx.addToken(.comma, ",");
                     return ret;
@@ -484,15 +492,22 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                         });
                         _ = try ctx.addToken(.r_paren, ")");
                         break :align_blk align_expr;
-                    } else 0;
+                    } else null;
 
-                    try members.append(try ctx.addNode(.{
+                    try members.append(try ctx.addNode(if (align_expr != null) .{
                         .tag = .container_field_align,
                         .main_token = name_tok,
-                        .data = .{
-                            .lhs = type_expr,
-                            .rhs = align_expr,
-                        },
+                        .data = .{ .node_and_node = .{
+                            type_expr,
+                            align_expr.?,
+                        } },
+                    } else .{
+                        .tag = .container_field_init,
+                        .main_token = name_tok,
+                        .data = .{ .node_and_opt_node = .{
+                            type_expr,
+                            .none,
+                        } },
                     }));
                     _ = try ctx.addToken(.comma, ",");
                 }
@@ -521,19 +536,16 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                 try ctx.addNode(.{
                     .tag = .container_decl_two,
                     .main_token = struct_tok,
-                    .data = .{
-                        .lhs = 0,
-                        .rhs = 0,
-                    },
+                    .data = .{ .opt_node_and_opt_node = .{
+                        .none,
+                        .none,
+                    } },
                 })
             else
                 try ctx.addNode(.{
                     .tag = .container_decl_trailing,
                     .main_token = struct_tok,
-                    .data = .{
-                        .lhs = span.start,
-                        .rhs = span.end,
-                    },
+                    .data = .{ .extra_range = span },
                 });
         },
         .@"union" => blk: {
@@ -575,15 +587,22 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                     });
                     _ = try ctx.addToken(.r_paren, ")");
                     break :align_blk align_expr;
-                } else 0;
+                } else null;
 
-                members[vi] = try ctx.addNode(.{
+                members[vi] = try ctx.addNode(if (align_expr != null) .{
                     .tag = .container_field_align,
                     .main_token = name_tok,
-                    .data = .{
-                        .lhs = type_expr,
-                        .rhs = align_expr,
-                    },
+                    .data = .{ .node_and_node = .{
+                        type_expr,
+                        align_expr.?,
+                    } },
+                } else .{
+                    .tag = .container_field_init,
+                    .main_token = name_tok,
+                    .data = .{ .node_and_opt_node = .{
+                        type_expr,
+                        .none,
+                    } },
                 });
                 _ = try ctx.addToken(.comma, ",");
             }
@@ -594,19 +613,16 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                 try ctx.addNode(.{
                     .tag = .container_decl_two,
                     .main_token = union_tok,
-                    .data = .{
-                        .lhs = 0,
-                        .rhs = 0,
-                    },
+                    .data = .{ .opt_node_and_opt_node = .{
+                        .none,
+                        .none,
+                    } },
                 })
             else
                 try ctx.addNode(.{
                     .tag = .container_decl_trailing,
                     .main_token = union_tok,
-                    .data = .{
-                        .lhs = span.start,
-                        .rhs = span.end,
-                    },
+                    .data = .{ .extra_range = span },
                 });
         },
         .func_proto => blk: {
@@ -651,22 +667,22 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                 try ctx.addNode(.{
                     .tag = .fn_proto_simple,
                     .main_token = fn_token,
-                    .data = .{
-                        .lhs = 0,
-                        .rhs = return_type_expr,
-                    },
+                    .data = .{ .opt_node_and_opt_node = .{
+                        .none,
+                        return_type_expr.toOptional(),
+                    } },
                 })
             else
                 try ctx.addNode(.{
                     .tag = .fn_proto_multi,
                     .main_token = fn_token,
-                    .data = .{
-                        .lhs = try ctx.addExtra(NodeSubRange{
+                    .data = .{ .extra_and_opt_node = .{
+                        try ctx.addExtra(NodeSubRange{
                             .start = span.start,
                             .end = span.end,
                         }),
-                        .rhs = return_type_expr,
-                    },
+                        return_type_expr.toOptional(),
+                    } },
                 });
         },
         .func => blk: {
@@ -681,10 +697,10 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             break :blk try ctx.addNode(.{
                 .tag = .ptr_type_aligned,
                 .main_token = main_token,
-                .data = .{
-                    .lhs = 0,
-                    .rhs = try add_child_node(btf, t.unnamed_0.type, names, ctx, chain),
-                },
+                .data = .{ .opt_node_and_node = .{
+                    .none,
+                    try add_child_node(btf, t.unnamed_0.type, names, ctx, chain),
+                } },
             });
         },
         .@"var", .datasec, .decl_tag, .type_tag => {
@@ -707,10 +723,7 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
     try ctx.nodes.append(gpa, .{
         .tag = .root,
         .main_token = 0,
-        .data = .{
-            .lhs = undefined,
-            .rhs = undefined,
-        },
+        .data = undefined,
     });
 
     const root_members = blk: {
@@ -807,10 +820,10 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
             const idx = try ctx.addNode(.{
                 .tag = .simple_var_decl,
                 .main_token = const_tok,
-                .data = .{
-                    .lhs = 0,
-                    .rhs = child,
-                },
+                .data = .{ .opt_node_and_opt_node = .{
+                    .none,
+                    child.toOptional(),
+                } },
             });
             try result.append(idx);
         }
@@ -847,10 +860,10 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
                 const idx = try ctx.addNode(.{
                     .tag = .simple_var_decl,
                     .main_token = const_tok,
-                    .data = .{
-                        .lhs = 0,
-                        .rhs = child,
-                    },
+                    .data = .{ .opt_node_and_opt_node = .{
+                        .none,
+                        child.toOptional(),
+                    } },
                 });
                 try members.append(idx);
             }
@@ -860,19 +873,16 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
             const decl = try ctx.addNode(.{
                 .tag = .container_decl_trailing,
                 .main_token = struct_tok,
-                .data = .{
-                    .lhs = span.start,
-                    .rhs = span.end,
-                },
+                .data = .{ .extra_range = span },
             });
 
             try result.append(try ctx.addNode(.{
                 .tag = .simple_var_decl,
                 .main_token = func_const_tok,
-                .data = .{
-                    .lhs = 0,
-                    .rhs = decl,
-                },
+                .data = .{ .opt_node_and_opt_node = .{
+                    .none,
+                    decl.toOptional(),
+                } },
             }));
         }
 
@@ -880,10 +890,7 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
     };
     dprint("source: {s}\n", .{ctx.buf.items});
 
-    ctx.nodes.items(.data)[0] = .{
-        .lhs = root_members.start,
-        .rhs = root_members.end,
-    };
+    ctx.nodes.items(.data)[0] = .{ .extra_range = root_members };
 
     try ctx.tokens.append(gpa, .{
         .tag = .eof,
