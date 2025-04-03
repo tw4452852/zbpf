@@ -76,6 +76,7 @@ const Context = struct {
     nodes: std.zig.Ast.NodeList = .{},
     extra_data: std.ArrayListUnmanaged(u32) = .empty,
     tokens: std.zig.Ast.TokenList = .{},
+    fixups: std.zig.Ast.Fixups = .{},
 
     fn addTokenFmt(ctx: *Context, tag: TokenTag, comptime format: []const u8, args: anytype) Allocator.Error!TokenIndex {
         const start_index = ctx.buf.items.len;
@@ -912,7 +913,7 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
 
     var buffer = std.ArrayList(u8).init(gpa);
     defer buffer.deinit();
-    try tree.renderToArrayList(&buffer, .{});
+    try tree.renderToArrayList(&buffer, ctx.fixups);
 
     return buffer.toOwnedSliceSentinel(0);
 }
