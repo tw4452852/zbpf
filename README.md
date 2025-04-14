@@ -127,5 +127,6 @@ xdp ping | [source](samples/xdp_ping.zig) | [source](src/tests/xdp_ping.zig)
 kfunc | [source](samples/kfunc.zig) | [source](src/tests/kfunc.zig)
 stack_trace | [source](samples/stacktrace.zig) | [source](src/tests/stacktrace.zig)
 uprobe | [source](samples/uprobe.zig) | [source](src/tests/uprobe.zig)
+tc_ingress | [source](samples/tc_ingress.zig) | [source](src/tests/tc_ingress.zig)
 
 **Have fun!**
