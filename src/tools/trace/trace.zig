@@ -196,7 +196,7 @@ fn interrupt_handler(_: c_int) callconv(.C) void {
 fn setup_ctrl_c() void {
     const act = std.posix.Sigaction{
         .handler = .{ .handler = interrupt_handler },
-        .mask = std.posix.empty_sigset,
+        .mask = undefined,
         .flags = 0,
     };
     std.posix.sigaction(std.posix.SIG.INT, &act, null);
