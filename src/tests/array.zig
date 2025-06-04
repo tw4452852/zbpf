@@ -37,8 +37,13 @@ test "array" {
 
         // run bpf program
         const fd = libbpf.bpf_program__fd(prog);
+        var buf: [32]u8 = undefined;
+
         var attr = std.mem.zeroInit(libbpf.bpf_test_run_opts, .{
             .sz = @sizeOf(libbpf.bpf_test_run_opts),
+            .data_in = &buf,
+            .data_size_in = 32,
+            .data_out = &buf,
         });
         ret = libbpf.bpf_prog_test_run_opts(fd, &attr);
         if (ret != 0) {
