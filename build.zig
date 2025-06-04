@@ -157,7 +157,7 @@ fn create_trace_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
 
     try w.writeAll("};");
     const f = b.addWriteFiles().add(
-        "generated_tracing_zig",
+        "generated_tracing.zig",
         try content.toOwnedSlice(),
     );
     const build_options_mod = b.createModule(.{ .root_source_file = f });
@@ -238,7 +238,7 @@ fn create_test_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: s
     // we have to create a temporary file for the debugging flag
     exe_tests.root_module.addAnonymousImport("@build_options", .{
         .root_source_file = b.addWriteFiles().add(
-            "generated_test_build_zig",
+            "generated_test_build.zig",
             b.fmt("pub const debug :bool = {s};", .{if (debugging) "true" else "false"}),
         ),
     });
@@ -298,7 +298,7 @@ fn create_fuzz_test_step(b: *std.Build, target: std.Build.ResolvedTarget, optimi
     // we have to create a temporary file for the debugging flag
     exe_tests.root_module.addAnonymousImport("@build_options", .{
         .root_source_file = b.addWriteFiles().add(
-            "generated_test_build_zig",
+            "generated_test_build.zig",
             b.fmt(
                 \\pub const debug :bool = {s};
                 \\pub const zig_exe = "{s}";
