@@ -15,15 +15,9 @@ jobs:
       - uses: mlugg/setup-zig@v2
         with:
           version: master
+          use-cache: false
       - run: uname -a
+      - run: zig fmt --check .
       - run: zig build
       - run: zig build docs
       - run: zig build test
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: master
-      - run: zig fmt --check .

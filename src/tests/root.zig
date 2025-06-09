@@ -68,4 +68,5 @@ test {
     _ = @import("kfunc.zig");
     _ = @import("stacktrace.zig");
     _ = @import("uprobe.zig");
+    _ = @import("lpm_trie.zig");
 }

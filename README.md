@@ -128,5 +128,6 @@ kfunc | [source](samples/kfunc.zig) | [source](src/tests/kfunc.zig)
 stack_trace | [source](samples/stacktrace.zig) | [source](src/tests/stacktrace.zig)
 uprobe | [source](samples/uprobe.zig) | [source](src/tests/uprobe.zig)
 tc_ingress | [source](samples/tc_ingress.zig) | [source](src/tests/tc_ingress.zig)
+lpm_trie | [source](samples/lpm_trie.zig) | [source](src/tests/lpm_trie.zig)
 
 **Have fun!**
