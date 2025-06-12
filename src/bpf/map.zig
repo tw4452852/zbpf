@@ -57,7 +57,7 @@ fn Map(
     }} else [_]StructField{}) ++ (if (map_flags > 0) [_]StructField{.{
         .name = "map_flags",
         .type = ?*[map_flags]u8,
-        .default_value = null,
+        .default_value_ptr = null,
         .is_comptime = false,
         .alignment = @alignOf(?*[map_flags]u8),
     }} else [_]StructField{});
@@ -314,6 +314,45 @@ pub fn StackTraceMap(
                 exit(@src(), @as(c_long, rc));
             }
             return @intCast(rc);
+        }
+    };
+}
+
+/// Represent `BPF_MAP_TYPE_LPM_TRIE`.
+pub fn LpmTrie(
+    comptime name: []const u8,
+    comptime Key: type,
+    comptime Value: type,
+    comptime max_entries: u32,
+    comptime flags: u32,
+) type {
+    return struct {
+        map: Map(name, .lpm_trie, Key, Value, max_entries, flags),
+
+        const Self = @This();
+
+        /// Initialization
+        pub fn init() Self {
+            return .{ .map = .{} };
+        }
+
+        /// Return the pointer to the entry associated with the key.
+        /// If not existing, return `null`.
+        /// If any error happens, current program will exit immediately.
+        pub fn lookup(self: *const Self, key: Key) ?*Value {
+            return self.map.lookup(key);
+        }
+
+        /// Update the entry associated with key according to the specified strategy.
+        /// If any error happens, current program will exit immediately.
+        pub fn update(self: *const Self, update_type: MapUpdateType, key: Key, value: Value) void {
+            return self.map.update(update_type, key, value);
+        }
+
+        /// Delete the entry associated with the key.
+        /// If any error happens, current program will exit immediately.
+        pub fn delete(self: *const Self, key: Key) void {
+            return self.map.delete(key);
         }
     };
 }
