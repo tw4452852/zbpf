@@ -8,8 +8,8 @@
             .hash = "libbpf-1.5.0-2-x6jL2TGZAACMJeINitNwR5elab7ludKqn2dRxn0n3dKo",
         },
         .libelf = .{
-            .url = "https://github.com/tw4452852/elfutils/archive/refs/tags/0.190.0-5.tar.gz",
-            .hash = "libelf-0.190.0-5-vOOfyfbDAADBXjq7bs5FjMtFUFS_NyQ7apUEZXieSLRl",
+            .url = "https://github.com/tw4452852/elfutils/archive/refs/tags/0.190.0-6.tar.gz",
+            .hash = "libelf-0.190.0-6-vOOfyQ_EAABYUd31oeM-KICBkNyJQpb_WbEhb0vtL1Zm",
         },
 
         .btf_sanitizer = .{
