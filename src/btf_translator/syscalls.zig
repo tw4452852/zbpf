@@ -35,11 +35,9 @@ pub const dup = fn (fildes: Kernel.unsigned_int) c_long;
 pub const dup2 = fn (oldfd: Kernel.unsigned_int, newfd: Kernel.unsigned_int) c_long;
 pub const pause = fn () c_long;
 pub const nanosleep = fn (rqtp: *Kernel.__kernel_timespec, rmtp: *Kernel.__kernel_timespec) c_long;
-pub usingnamespace if (@hasDecl(Kernel, "__kernel_old_itimerval")) struct {
-    pub const getitimer = fn (which: Kernel.int, value: *Kernel.__kernel_old_itimerval) c_long;
-    pub const alarm = fn (seconds: Kernel.unsigned_int) c_long;
-    pub const setitimer = fn (which: Kernel.int, value: *Kernel.__kernel_old_itimerval, ovalue: *Kernel.__kernel_old_itimerval) c_long;
-} else struct {};
+pub const getitimer = if (@hasDecl(Kernel, "__kernel_old_itimerval")) fn (which: Kernel.int, value: *Kernel.__kernel_old_itimerval) c_long else @compileError("not support");
+pub const alarm = if (@hasDecl(Kernel, "__kernel_old_itimerval")) fn (seconds: Kernel.unsigned_int) c_long else @compileError("not support");
+pub const setitimer = if (@hasDecl(Kernel, "__kernel_old_itimerval")) fn (which: Kernel.int, value: *Kernel.__kernel_old_itimerval, ovalue: *Kernel.__kernel_old_itimerval) c_long else @compileError("not support");
 pub const getpid = fn () c_long;
 pub const sendfile64 = fn (out_fd: Kernel.int, in_fd: Kernel.int, offset: *Kernel.loff_t, count: Kernel.size_t) c_long;
 pub const socket = fn (family: Kernel.int, type: Kernel.int, protocol: Kernel.int) c_long;
@@ -133,9 +131,8 @@ pub const rt_sigtimedwait = fn (uthese: *Kernel.sigset_t, uinfo: *Kernel.siginfo
 pub const rt_sigqueueinfo = fn (pid: Kernel.pid_t, sig: Kernel.int, uinfo: *Kernel.siginfo_t) c_long;
 pub const rt_sigsuspend = fn (unewset: *Kernel.sigset_t, sigsetsize: Kernel.size_t) c_long;
 pub const sigaltstack = fn (uss: *Kernel.stack_t, uoss: *Kernel.stack_t) c_long;
-pub usingnamespace if (@hasDecl(Kernel, "utimbuf")) struct {
-    pub const utime = fn (filename: *Kernel.char, times: *Kernel.utimbuf) c_long;
-} else struct {};
+
+pub const utime = if (@hasDecl(Kernel, "utimbuf")) fn (filename: *Kernel.char, times: *Kernel.utimbuf) c_long else @compileError("not support");
 pub const mknod = fn (filename: *Kernel.char, mode: Kernel.umode_t, dev: unsigned_int) c_long;
 pub const personality = fn (personality: Kernel.unsigned_int) c_long;
 pub const ustat = fn (dev: unsigned_int, ubuf: *Kernel.ustat) c_long;
@@ -193,9 +190,7 @@ pub const removexattr = fn (pathname: *Kernel.char, name: *Kernel.char) c_long;
 pub const lremovexattr = fn (pathname: *Kernel.char, name: *Kernel.char) c_long;
 pub const fremovexattr = fn (fd: Kernel.int, name: *Kernel.char) c_long;
 pub const tkill = fn (pid: Kernel.pid_t, sig: Kernel.int) c_long;
-pub usingnamespace if (@hasDecl(Kernel, "__kernel_old_time_t")) struct {
-    pub const time = fn (tloc: *Kernel.__kernel_old_time_t) c_long;
-} else struct {};
+pub const time = if (@hasDecl(Kernel, "__kernel_old_time_t")) fn (tloc: *Kernel.__kernel_old_time_t) c_long else @compileError("not support");
 pub const futex = fn (uaddr: *Kernel.u32, op: Kernel.int, val: Kernel.u32, utime: *Kernel.__kernel_timespec, uaddr2: *Kernel.u32, val3: Kernel.u32) c_long;
 pub const sched_setaffinity = fn (pid: Kernel.pid_t, len: Kernel.unsigned_int, user_mask_ptr: *c_ulong) c_long;
 pub const sched_getaffinity = fn (pid: Kernel.pid_t, len: Kernel.unsigned_int, user_mask_ptr: *c_ulong) c_long;
@@ -235,9 +230,8 @@ pub const mq_timedsend = fn (mqdes: Kernel.mqd_t, u_msg_ptr: *Kernel.char, msg_l
 pub const mq_timedreceive = fn (mqdes: Kernel.mqd_t, u_msg_ptr: *Kernel.char, msg_len: Kernel.size_t, u_msg_prio: *Kernel.unsigned_int, u_abs_timeout: *Kernel.__kernel_timespec) c_long;
 pub const mq_notify = fn (mqdes: Kernel.mqd_t, u_notification: *Kernel.sigevent) c_long;
 pub const mq_getsetattr = fn (mqdes: Kernel.mqd_t, u_mqstat: *Kernel.mq_attr, u_omqstat: *Kernel.mq_attr) c_long;
-pub usingnamespace if (@hasDecl(Kernel, "kexec_segment")) struct {
-    pub const kexec_load = fn (entry: c_ulong, nr_segments: c_ulong, segments: *Kernel.kexec_segment, flags: c_ulong) c_long;
-} else struct {};
+
+pub const kexec_load = if (@hasDecl(Kernel, "kexec_segment")) fn (entry: c_ulong, nr_segments: c_ulong, segments: *Kernel.kexec_segment, flags: c_ulong) c_long else @compileError("not support");
 pub const waitid = fn (which: Kernel.int, upid: Kernel.pid_t, infop: *Kernel.siginfo, options: Kernel.int, ru: *Kernel.rusage) c_long;
 pub const add_key = fn (_type: *Kernel.char, _description: *Kernel.char, _payload: *Kernel.void, plen: Kernel.size_t, ringid: Kernel.key_serial_t) c_long;
 pub const request_key = fn (_type: *Kernel.char, _description: *Kernel.char, _callout_info: *Kernel.char, destringid: Kernel.key_serial_t) c_long;
@@ -328,11 +322,9 @@ pub const io_pgetevents = fn (ctx_id: Kernel.aio_context_t, min_nr: long_int, nr
 pub const rseq = fn (rseq: *Kernel.rseq, rseq_len: Kernel.u32, flags: Kernel.int, sig: Kernel.u32) c_long;
 pub const uretprobe = fn () c_long;
 pub const pidfd_send_signal = fn (pidfd: Kernel.int, sig: Kernel.int, info: *Kernel.siginfo_t, flags: Kernel.unsigned_int) c_long;
-pub usingnamespace if (@hasDecl(Kernel, "io_uring_params")) struct {
-    pub const io_uring_setup = fn (entries: Kernel.u32, params: *Kernel.io_uring_params) c_long;
-    pub const io_uring_enter = fn (fd: Kernel.unsigned_int, to_submit: Kernel.u32, min_complete: Kernel.u32, flags: Kernel.u32, argp: *Kernel.void, argsz: Kernel.size_t) c_long;
-    pub const io_uring_register = fn (fd: Kernel.unsigned_int, opcode: Kernel.unsigned_int, arg: *Kernel.void, nr_args: Kernel.unsigned_int) c_long;
-} else struct {};
+pub const io_uring_setup = if (@hasDecl(Kernel, "io_uring_params")) fn (entries: Kernel.u32, params: *Kernel.io_uring_params) c_long else @compileError("not support");
+pub const io_uring_enter = if (@hasDecl(Kernel, "io_uring_params")) fn (fd: Kernel.unsigned_int, to_submit: Kernel.u32, min_complete: Kernel.u32, flags: Kernel.u32, argp: *Kernel.void, argsz: Kernel.size_t) c_long else @compileError("not support");
+pub const io_uring_register = if (@hasDecl(Kernel, "io_uring_params")) fn (fd: Kernel.unsigned_int, opcode: Kernel.unsigned_int, arg: *Kernel.void, nr_args: Kernel.unsigned_int) c_long else @compileError("not support");
 pub const open_tree = fn (dfd: Kernel.int, filename: *Kernel.char, flags: unsigned_int) c_long;
 pub const move_mount = fn (from_dfd: Kernel.int, from_pathname: *Kernel.char, to_dfd: Kernel.int, to_pathname: *Kernel.char, flags: Kernel.unsigned_int) c_long;
 pub const fsopen = fn (_fs_name: *Kernel.char, flags: Kernel.unsigned_int) c_long;
@@ -342,44 +334,39 @@ pub const fspick = fn (dfd: Kernel.int, path: *Kernel.char, flags: Kernel.unsign
 pub const pidfd_open = fn (pid: Kernel.pid_t, flags: Kernel.unsigned_int) c_long;
 pub const clone3 = fn (uargs: *Kernel.clone_args, size: Kernel.size_t) c_long;
 pub const close_range = fn (fd: Kernel.unsigned_int, max_fd: Kernel.unsigned_int, flags: Kernel.unsigned_int) c_long;
-pub usingnamespace if (@hasDecl(Kernel, "open_how")) struct {
-    pub const openat2 = fn (dfd: Kernel.int, filename: *Kernel.char, how: *Kernel.open_how, usize: Kernel.size_t) c_long;
-} else struct {};
+
+pub const openat2 = if (@hasDecl(Kernel, "open_how")) fn (dfd: Kernel.int, filename: *Kernel.char, how: *Kernel.open_how, usize: Kernel.size_t) c_long else @compileError("not support");
 pub const pidfd_getfd = fn (pidfd: Kernel.int, fd: Kernel.int, flags: Kernel.unsigned_int) c_long;
 pub const faccessat2 = fn (dfd: Kernel.int, filename: *Kernel.char, mode: Kernel.int, flags: Kernel.int) c_long;
 pub const process_madvise = fn (pidfd: Kernel.int, vec: *Kernel.iovec, vlen: Kernel.size_t, behavior: Kernel.int, flags: Kernel.unsigned_int) c_long;
 pub const epoll_pwait2 = fn (epfd: Kernel.int, events: *Kernel.epoll_event, maxevents: Kernel.int, timeout: *Kernel.__kernel_timespec, sigmask: *Kernel.sigset_t, sigsetsize: Kernel.size_t) c_long;
-pub usingnamespace if (@hasDecl(Kernel, "mount_attr")) struct {
-    pub const mount_setattr = fn (dfd: Kernel.int, path: *Kernel.char, flags: Kernel.unsigned_int, uattr: *Kernel.mount_attr, usize: Kernel.size_t) c_long;
-} else struct {};
+
+pub const mount_setattr = if (@hasDecl(Kernel, "mount_attr")) fn (dfd: Kernel.int, path: *Kernel.char, flags: Kernel.unsigned_int, uattr: *Kernel.mount_attr, usize: Kernel.size_t) c_long else @compileError("not support");
 pub const quotactl_fd = fn (fd: Kernel.unsigned_int, cmd: Kernel.unsigned_int, id: Kernel.qid_t, addr: *Kernel.void) c_long;
-pub usingnamespace if (@hasDecl(Kernel, "landlock_ruleset_attr")) struct {
-    pub const landlock_create_ruleset = fn (attr: *Kernel.landlock_ruleset_attr, size: Kernel.size_t, flags: Kernel.__u32) c_long;
-    pub const landlock_add_rule = fn (ruleset_fd: Kernel.int, rule_type: Kernel.landlock_rule_type, rule_attr: *Kernel.void, flags: Kernel.__u32) c_long;
-    pub const landlock_restrict_self = fn (ruleset_fd: Kernel.int, flags: Kernel.__u32) c_long;
-} else struct {};
+
+pub const landlock_create_ruleset = if (@hasDecl(Kernel, "landlock_ruleset_attr")) fn (attr: *Kernel.landlock_ruleset_attr, size: Kernel.size_t, flags: Kernel.__u32) c_long else @compileError("not support");
+pub const landlock_add_rule = if (@hasDecl(Kernel, "landlock_ruleset_attr")) fn (ruleset_fd: Kernel.int, rule_type: Kernel.landlock_rule_type, rule_attr: *Kernel.void, flags: Kernel.__u32) c_long else @compileError("not support");
+pub const landlock_restrict_self = if (@hasDecl(Kernel, "landlock_ruleset_attr")) fn (ruleset_fd: Kernel.int, flags: Kernel.__u32) c_long else @compileError("not support");
 pub const memfd_secret = fn (flags: Kernel.unsigned_int) c_long;
 pub const process_mrelease = fn (pidfd: Kernel.int, flags: Kernel.unsigned_int) c_long;
 pub const set_mempolicy_home_node = fn (start: c_ulong, len: c_ulong, home_node: c_ulong, flags: c_ulong) c_long;
-pub usingnamespace if (@hasDecl(Kernel, "cachestat_range")) struct {
-    pub const cachestat = fn (fd: Kernel.unsigned_int, cstat_range: *Kernel.cachestat_range, cstat: *Kernel.cachestat, flags: Kernel.unsigned_int) c_long;
-} else struct {};
+
+pub const cachestat = if (@hasDecl(Kernel, "cachestat_range")) fn (fd: Kernel.unsigned_int, cstat_range: *Kernel.cachestat_range, cstat: *Kernel.cachestat, flags: Kernel.unsigned_int) c_long else @compileError("not support");
+
 pub const fchmodat2 = fn (dfd: Kernel.int, filename: *Kernel.char, mode: Kernel.umode_t, flags: Kernel.unsigned_int) c_long;
 pub const map_shadow_stack = fn (addr: c_ulong, size: c_ulong, flags: Kernel.unsigned_int) c_long;
 pub const futex_wake = fn (uaddr: *Kernel.void, mask: c_ulong, nr: Kernel.int, flags: Kernel.unsigned_int) c_long;
 pub const futex_wait = fn (uaddr: *Kernel.void, val: c_ulong, mask: c_ulong, flags: Kernel.unsigned_int, timeout: *Kernel.__kernel_timespec, clockid: Kernel.clockid_t) c_long;
-pub usingnamespace if (@hasDecl(Kernel, "futex_waitv")) struct {
-    pub const futex_waitv = fn (waiters: *Kernel.futex_waitv, nr_futexes: Kernel.unsigned_int, flags: Kernel.unsigned_int, timeout: *Kernel.__kernel_timespec, clockid: Kernel.clockid_t) c_long;
-    pub const futex_requeue = fn (waiters: *Kernel.futex_waitv, flags: Kernel.unsigned_int, nr_wake: Kernel.int, nr_requeue: Kernel.int) c_long;
-} else struct {};
-pub usingnamespace if (@hasDecl(Kernel, "mnt_id_req")) struct {
-    pub const statmount = fn (req: *Kernel.mnt_id_req, buf: *Kernel.statmount, bufsize: Kernel.size_t, flags: Kernel.unsigned_int) c_long;
-    pub const listmount = fn (req: *Kernel.mnt_id_req, mnt_ids: *Kernel.u64, nr_mnt_ids: Kernel.size_t, flags: Kernel.unsigned_int) c_long;
-} else struct {};
-pub usingnamespace if (@hasDecl(Kernel, "lsm_ctx")) struct {
-    pub const lsm_get_self_attr = fn (attr: Kernel.unsigned_int, ctx: *Kernel.lsm_ctx, size: *Kernel.u32, flags: Kernel.u32) c_long;
-    pub const lsm_set_self_attr = fn (attr: Kernel.unsigned_int, ctx: *Kernel.lsm_ctx, size: Kernel.u32, flags: Kernel.u32) c_long;
-} else struct {};
+
+pub const futex_waitv = if (@hasDecl(Kernel, "futex_waitv")) fn (waiters: *Kernel.futex_waitv, nr_futexes: Kernel.unsigned_int, flags: Kernel.unsigned_int, timeout: *Kernel.__kernel_timespec, clockid: Kernel.clockid_t) c_long else @compileError("not support");
+pub const futex_requeue = if (@hasDecl(Kernel, "futex_waitv")) fn (waiters: *Kernel.futex_waitv, flags: Kernel.unsigned_int, nr_wake: Kernel.int, nr_requeue: Kernel.int) c_long else @compileError("not support");
+
+pub const statmount = if (@hasDecl(Kernel, "mnt_id_req")) fn (req: *Kernel.mnt_id_req, buf: *Kernel.statmount, bufsize: Kernel.size_t, flags: Kernel.unsigned_int) c_long else @compileError("not support");
+pub const listmount = if (@hasDecl(Kernel, "mnt_id_req")) fn (req: *Kernel.mnt_id_req, mnt_ids: *Kernel.u64, nr_mnt_ids: Kernel.size_t, flags: Kernel.unsigned_int) c_long else @compileError("not support");
+
+pub const lsm_get_self_attr = if (@hasDecl(Kernel, "lsm_ctx")) fn (attr: Kernel.unsigned_int, ctx: *Kernel.lsm_ctx, size: *Kernel.u32, flags: Kernel.u32) c_long else @compileError("not support");
+pub const lsm_set_self_attr = if (@hasDecl(Kernel, "lsm_ctx")) fn (attr: Kernel.unsigned_int, ctx: *Kernel.lsm_ctx, size: Kernel.u32, flags: Kernel.u32) c_long else @compileError("not support");
+
 pub const lsm_list_modules = fn (ids: *Kernel.u64, size: *Kernel.u32, flags: Kernel.u32) c_long;
 pub const mseal = fn (start: c_ulong, len: Kernel.size_t, flags: c_ulong) c_long;
 pub const arm64_personality = fn (personality: Kernel.unsigned_int) c_long;

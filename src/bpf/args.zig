@@ -188,95 +188,77 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
             return @alignCast(@ptrCast(self));
         }
 
-        pub usingnamespace if (f.@"fn".params.len < 1) struct {} else struct {
-            const RET = f.@"fn".params[0].type.?;
-
-            pub fn arg0(self: *Self) RET {
-                if (!in_bpf_program) {
-                    return cast(RET, self.get_regs().arg0_ptr().*);
-                } else {
-                    var ret: RET = undefined;
-                    const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg0_ptr());
-                    if (err != 0) printErr(@src(), err);
-                    return ret;
-                }
+        const ARG0 = if (f.@"fn".params.len < 1) @compileError("not support") else f.@"fn".params[0].type.?;
+        pub fn arg0(self: *Self) ARG0 {
+            if (!in_bpf_program) {
+                return cast(ARG0, self.get_regs().arg0_ptr().*);
+            } else {
+                var result: ARG0 = undefined;
+                const err = helpers.probe_read_kernel(@ptrCast(&result), @sizeOf(ARG0), self.get_regs().arg0_ptr());
+                if (err != 0) printErr(@src(), err);
+                return result;
             }
-        };
+        }
 
-        pub usingnamespace if (f.@"fn".params.len < 2) struct {} else struct {
-            const RET = f.@"fn".params[1].type.?;
-
-            pub fn arg1(self: *Self) RET {
-                if (!in_bpf_program) {
-                    return cast(RET, self.get_regs().arg1_ptr().*);
-                } else {
-                    var ret: RET = undefined;
-                    const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg1_ptr());
-                    if (err != 0) printErr(@src(), err);
-                    return ret;
-                }
+        const ARG1 = if (f.@"fn".params.len < 2) @compileError("not support") else f.@"fn".params[1].type.?;
+        pub fn arg1(self: *Self) ARG1 {
+            if (!in_bpf_program) {
+                return cast(ARG1, self.get_regs().arg1_ptr().*);
+            } else {
+                var result: ARG1 = undefined;
+                const err = helpers.probe_read_kernel(@ptrCast(&result), @sizeOf(ARG1), self.get_regs().arg1_ptr());
+                if (err != 0) printErr(@src(), err);
+                return result;
             }
-        };
+        }
 
-        pub usingnamespace if (f.@"fn".params.len < 3) struct {} else struct {
-            const RET = f.@"fn".params[2].type.?;
-
-            pub fn arg2(self: *Self) RET {
-                if (!in_bpf_program) {
-                    return cast(RET, self.get_regs().arg2_ptr().*);
-                } else {
-                    var ret: RET = undefined;
-                    const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg2_ptr());
-                    if (err != 0) printErr(@src(), err);
-                    return ret;
-                }
+        const ARG2 = if (f.@"fn".params.len < 3) @compileError("not support") else f.@"fn".params[2].type.?;
+        pub fn arg2(self: *Self) ARG2 {
+            if (!in_bpf_program) {
+                return cast(ARG2, self.get_regs().arg2_ptr().*);
+            } else {
+                var result: ARG2 = undefined;
+                const err = helpers.probe_read_kernel(@ptrCast(&result), @sizeOf(ARG2), self.get_regs().arg2_ptr());
+                if (err != 0) printErr(@src(), err);
+                return result;
             }
-        };
+        }
 
-        pub usingnamespace if (f.@"fn".params.len < 4) struct {} else struct {
-            const RET = f.@"fn".params[3].type.?;
-
-            pub fn arg3(self: *Self) RET {
-                if (!in_bpf_program) {
-                    return cast(RET, self.get_regs().arg3_ptr(for_syscall).*);
-                } else {
-                    var ret: RET = undefined;
-                    const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg3_ptr(for_syscall));
-                    if (err != 0) printErr(@src(), err);
-                    return ret;
-                }
+        const ARG3 = if (f.@"fn".params.len < 4) @compileError("not support") else f.@"fn".params[3].type.?;
+        pub fn arg3(self: *Self) ARG3 {
+            if (!in_bpf_program) {
+                return cast(ARG3, self.get_regs().arg3_ptr(for_syscall).*);
+            } else {
+                var result: ARG3 = undefined;
+                const err = helpers.probe_read_kernel(@ptrCast(&result), @sizeOf(ARG3), self.get_regs().arg3_ptr(for_syscall));
+                if (err != 0) printErr(@src(), err);
+                return result;
             }
-        };
+        }
 
-        pub usingnamespace if (f.@"fn".params.len < 5) struct {} else struct {
-            const RET = f.@"fn".params[4].type.?;
-
-            pub fn arg4(self: *Self) RET {
-                if (!in_bpf_program) {
-                    return cast(RET, self.get_regs().arg4_ptr().*);
-                } else {
-                    var ret: RET = undefined;
-                    const err = helpers.probe_read_kernel(@ptrCast(&ret), @sizeOf(RET), self.get_regs().arg4_ptr());
-                    if (err != 0) printErr(@src(), err);
-                    return ret;
-                }
+        const ARG4 = if (f.@"fn".params.len < 5) @compileError("not support") else f.@"fn".params[4].type.?;
+        pub fn arg4(self: *Self) ARG4 {
+            if (!in_bpf_program) {
+                return cast(ARG4, self.get_regs().arg4_ptr().*);
+            } else {
+                var result: ARG4 = undefined;
+                const err = helpers.probe_read_kernel(@ptrCast(&result), @sizeOf(ARG4), self.get_regs().arg4_ptr());
+                if (err != 0) printErr(@src(), err);
+                return result;
             }
-        };
+        }
 
-        pub usingnamespace if (f.@"fn".return_type.? == void) struct {} else struct {
-            const RET = f.@"fn".return_type.?;
-
-            pub fn ret(self: *Self) RET {
-                if (!in_bpf_program) {
-                    return cast(RET, self.get_regs().ret_ptr().*);
-                } else {
-                    var v: RET = undefined;
-                    const err = helpers.probe_read_kernel(@ptrCast(&v), @sizeOf(RET), self.get_regs().ret_ptr());
-                    if (err != 0) printErr(@src(), err);
-                    return v;
-                }
+        const RET = if (f.@"fn".return_type.? == void) @compileError("not support") else f.@"fn".return_type.?;
+        pub fn ret(self: *Self) RET {
+            if (!in_bpf_program) {
+                return cast(RET, self.get_regs().ret_ptr().*);
+            } else {
+                var v: RET = undefined;
+                const err = helpers.probe_read_kernel(@ptrCast(&v), @sizeOf(RET), self.get_regs().ret_ptr());
+                if (err != 0) printErr(@src(), err);
+                return v;
             }
-        };
+        }
     };
 }
 
@@ -298,52 +280,34 @@ pub fn SYSCALL(comptime name: []const u8) type {
                 @ptrCast(self);
         }
 
-        pub usingnamespace if (f.@"fn".params.len < 1) struct {} else struct {
-            const RET = f.@"fn".params[0].type.?;
+        const ARG0 = if (f.@"fn".params.len < 1) @compileError("not support") else f.@"fn".params[0].type.?;
+        pub fn arg0(self: *Self) ARG0 {
+            return self.get_arg_ctx().arg0();
+        }
 
-            pub fn arg0(self: *Self) RET {
-                return self.get_arg_ctx().arg0();
-            }
-        };
+        const ARG1 = if (f.@"fn".params.len < 2) @compileError("not support") else f.@"fn".params[1].type.?;
+        pub fn arg1(self: *Self) ARG1 {
+            return self.get_arg_ctx().arg1();
+        }
 
-        pub usingnamespace if (f.@"fn".params.len < 2) struct {} else struct {
-            const RET = f.@"fn".params[1].type.?;
+        const ARG2 = if (f.@"fn".params.len < 3) @compileError("not support") else f.@"fn".params[2].type.?;
+        pub fn arg2(self: *Self) ARG2 {
+            return self.get_arg_ctx().arg2();
+        }
 
-            pub fn arg1(self: *Self) RET {
-                return self.get_arg_ctx().arg1();
-            }
-        };
+        const ARG3 = if (f.@"fn".params.len < 4) @compileError("not support") else f.@"fn".params[3].type.?;
+        pub fn arg3(self: *Self) ARG3 {
+            return self.get_arg_ctx().arg3();
+        }
 
-        pub usingnamespace if (f.@"fn".params.len < 3) struct {} else struct {
-            const RET = f.@"fn".params[2].type.?;
+        const ARG4 = if (f.@"fn".params.len < 5) @compileError("not support") else f.@"fn".params[4].type.?;
+        pub fn arg4(self: *Self) RET {
+            return self.get_arg_ctx().arg4();
+        }
 
-            pub fn arg2(self: *Self) RET {
-                return self.get_arg_ctx().arg2();
-            }
-        };
-
-        pub usingnamespace if (f.@"fn".params.len < 4) struct {} else struct {
-            const RET = f.@"fn".params[3].type.?;
-
-            pub fn arg3(self: *Self) RET {
-                return self.get_arg_ctx().arg3();
-            }
-        };
-
-        pub usingnamespace if (f.@"fn".params.len < 5) struct {} else struct {
-            const RET = f.@"fn".params[4].type.?;
-
-            pub fn arg4(self: *Self) RET {
-                return self.get_arg_ctx().arg4();
-            }
-        };
-
-        pub usingnamespace if (f.@"fn".return_type.? == void) struct {} else struct {
-            const RET = f.@"fn".return_type.?;
-
-            pub fn ret(self: *Self) RET {
-                return @as(*T, @ptrCast(self)).ret();
-            }
-        };
+        const RET = if (f.@"fn".return_type.? == void) @compileError("not support") else f.@"fn".return_type.?;
+        pub fn ret(self: *Self) RET {
+            return @as(*T, @ptrCast(self)).ret();
+        }
     };
 }

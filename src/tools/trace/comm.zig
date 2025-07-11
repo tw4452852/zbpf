@@ -122,63 +122,61 @@ pub fn Arg(comptime name: []const u8, comptime kind: build_options.Kind) type {
             };
         }
 
-        pub usingnamespace if (!in_bpf_program) struct {} else struct {
-            pub fn copy(comptime specifier: []const u8, ctx: *anyopaque, dst: *[*c]u8) void {
-                // trim trailing placeholder if any
-                const slash = comptime std.mem.lastIndexOfScalar(u8, specifier, '/');
-                comptime var it = std.mem.tokenizeScalar(u8, specifier[0..if (slash) |si| si else specifier.len], '.');
-                const argN = comptime it.next().?;
-                comptime var FT: type = @TypeOf(@field(F.Ctx(), argN)(@ptrFromInt(1)));
-                const arg = @field(F.Ctx(), argN)(@ptrCast(ctx));
+        pub fn copy(comptime specifier: []const u8, ctx: *anyopaque, dst: *[*c]u8) if (!in_bpf_program) @compileError("not support") else void {
+            // trim trailing placeholder if any
+            const slash = comptime std.mem.lastIndexOfScalar(u8, specifier, '/');
+            comptime var it = std.mem.tokenizeScalar(u8, specifier[0..if (slash) |si| si else specifier.len], '.');
+            const argN = comptime it.next().?;
+            comptime var FT: type = @TypeOf(@field(F.Ctx(), argN)(@ptrFromInt(1)));
+            const arg = @field(F.Ctx(), argN)(@ptrCast(ctx));
+
+            if (is_string(FT)) {
+                copy_properly(@intFromPtr(dst.*), @intFromPtr(arg), @sizeOf(String), true);
+                dst.* += @sizeOf(Field(specifier));
+                return;
+            }
+
+            comptime var ti = @typeInfo(FT);
+            var src: usize = if (is_pointer(FT)) @intFromPtr(arg) else @intFromPtr(&arg);
+
+            inline while (comptime it.next()) |field_name| {
+                if (ti == .optional) {
+                    FT = ti.optional.child;
+                    ti = @typeInfo(FT);
+                }
+                if (ti == .pointer) {
+                    FT = ti.pointer.child;
+                    ti = @typeInfo(FT);
+                }
+
+                // find and access field
+                comptime var field_offset: usize = 0;
+                if (ti != .@"struct") @compileError(@typeName(FT) ++ "is not a struct");
+                inline for (ti.@"struct".fields) |field| {
+                    if (comptime std.mem.eql(u8, field.name, field_name)) {
+                        field_offset = @offsetOf(FT, field_name);
+                        FT = field.type;
+                        ti = @typeInfo(FT);
+                        break;
+                    }
+                } else @compileError("can't find field " ++ field_name ++ " in " ++ @typeName(FT));
 
                 if (is_string(FT)) {
-                    copy_properly(@intFromPtr(dst.*), @intFromPtr(arg), @sizeOf(String), true);
+                    copy_properly(@intFromPtr(dst.*), src + field_offset, @sizeOf(String), true);
                     dst.* += @sizeOf(Field(specifier));
                     return;
                 }
 
-                comptime var ti = @typeInfo(FT);
-                var src: usize = if (is_pointer(FT)) @intFromPtr(arg) else @intFromPtr(&arg);
+                if (ti == .pointer) {
+                    var dst_p: usize = undefined;
 
-                inline while (comptime it.next()) |field_name| {
-                    if (ti == .optional) {
-                        FT = ti.optional.child;
-                        ti = @typeInfo(FT);
-                    }
-                    if (ti == .pointer) {
-                        FT = ti.pointer.child;
-                        ti = @typeInfo(FT);
-                    }
-
-                    // find and access field
-                    comptime var field_offset: usize = 0;
-                    if (ti != .@"struct") @compileError(@typeName(FT) ++ "is not a struct");
-                    inline for (ti.@"struct".fields) |field| {
-                        if (comptime std.mem.eql(u8, field.name, field_name)) {
-                            field_offset = @offsetOf(FT, field_name);
-                            FT = field.type;
-                            ti = @typeInfo(FT);
-                            break;
-                        }
-                    } else @compileError("can't find field " ++ field_name ++ " in " ++ @typeName(FT));
-
-                    if (is_string(FT)) {
-                        copy_properly(@intFromPtr(dst.*), src + field_offset, @sizeOf(String), true);
-                        dst.* += @sizeOf(Field(specifier));
-                        return;
-                    }
-
-                    if (ti == .pointer) {
-                        var dst_p: usize = undefined;
-
-                        copy_properly(@intFromPtr(&dst_p), src + field_offset, @sizeOf(usize), false);
-                        src = dst_p;
-                    } else src += field_offset;
-                }
-
-                copy_properly(@intFromPtr(dst.*), src, @sizeOf(Field(specifier)), is_string(FT));
-                dst.* += @sizeOf(Field(specifier));
+                    copy_properly(@intFromPtr(&dst_p), src + field_offset, @sizeOf(usize), false);
+                    src = dst_p;
+                } else src += field_offset;
             }
-        };
+
+            copy_properly(@intFromPtr(dst.*), src, @sizeOf(Field(specifier)), is_string(FT));
+            dst.* += @sizeOf(Field(specifier));
+        }
     };
 }
