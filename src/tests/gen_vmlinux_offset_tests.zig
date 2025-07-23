@@ -22,7 +22,7 @@ pub fn main() !void {
 
     var it = std.process.args();
     _ = it.skip(); // skip process name
-    var output: std.fs.File = std.io.getStdOut();
+    var output: std.fs.File = std.fs.File.stdout();
     var vmlinux_arg: ?[:0]const u8 = null;
     while (it.next()) |arg| {
         if (std.mem.startsWith(u8, arg, "-o")) {
@@ -44,9 +44,9 @@ pub fn main() !void {
     }
 
     defer output.close();
-    const w = output.writer();
-    try w.writeAll("const vmlinux = @import(\"vmlinux\");\n");
-    try w.writeAll("const std = @import(\"std\");\n");
+    var w = output.writer(&.{});
+    try w.interface.writeAll("const vmlinux = @import(\"vmlinux\");\n");
+    try w.interface.writeAll("const std = @import(\"std\");\n");
 
     // Check structure size and non-bitfield offsets are consistent with btf
     for (1..c.btf__type_cnt(btf)) |i| {
@@ -63,11 +63,11 @@ pub fn main() !void {
 
             const uniq_name = try std.fmt.allocPrint(gpa, "{s}__{d}", .{ struct_name, i });
 
-            try w.print("test \"{s}\" {{\n", .{uniq_name});
-            try w.print("const name = if (@hasDecl(vmlinux, \"{s}\")) \"{s}\" else \"{s}\";\n", .{ uniq_name, uniq_name, struct_name });
-            defer w.writeAll("}\n") catch unreachable;
+            try w.interface.print("test \"{s}\" {{\n", .{uniq_name});
+            try w.interface.print("const name = if (@hasDecl(vmlinux, \"{s}\")) \"{s}\" else \"{s}\";\n", .{ uniq_name, uniq_name, struct_name });
+            defer w.interface.writeAll("}\n") catch unreachable;
 
-            try w.print("try std.testing.expectEqual({}, @sizeOf(@field(vmlinux, name)));\n", .{struct_sz});
+            try w.interface.print("try std.testing.expectEqual({}, @sizeOf(@field(vmlinux, name)));\n", .{struct_sz});
             for (0..vlen) |vi| {
                 const m_sz = c.btf_member_bitfield_size(t, @intCast(vi));
                 const m_off = c.btf_member_bit_offset(t, @intCast(vi));
@@ -80,7 +80,7 @@ pub fn main() !void {
                 else
                     try std.fmt.allocPrint(gpa, "field{}", .{vi});
 
-                try w.print("try std.testing.expectEqual({}, @bitOffsetOf(@field(vmlinux, name), \"{s}\"));\n", .{ m_off, field_name });
+                try w.interface.print("try std.testing.expectEqual({}, @bitOffsetOf(@field(vmlinux, name), \"{s}\"));\n", .{ m_off, field_name });
             }
         }
     }

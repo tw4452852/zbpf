@@ -20,7 +20,7 @@ fn create_bpf_prog(b: *std.Build, endian: std.builtin.Endian, src_path: []const 
                 },
                 .os_tag = .freestanding,
             }),
-            .optimize = .ReleaseFast,
+            .optimize = .ReleaseFast, // some assertions in debug mode are blocked by bpf verifier
         }),
     });
     prog.root_module.strip = false;
@@ -28,7 +28,9 @@ fn create_bpf_prog(b: *std.Build, endian: std.builtin.Endian, src_path: []const 
     prog.root_module.addImport("vmlinux", b.modules.get("vmlinux").?);
     if (build_options_opt) |build_options| prog.root_module.addImport("@build_options", build_options);
 
-    const run_btf_sanitizer = b.addRunArtifact(b.dependency("btf_sanitizer", .{ .optimize = .ReleaseFast }).artifact("btf_sanitizer"));
+    const run_btf_sanitizer = b.addRunArtifact(b.dependency("btf_sanitizer", .{
+        .optimize = .Debug,
+    }).artifact("btf_sanitizer"));
     run_btf_sanitizer.addFileArg(prog.getEmittedBin());
     if (vmlinux_bin_path) |vmlinux| {
         run_btf_sanitizer.addPrefixedFileArg("-vmlinux", .{ .cwd_relative = vmlinux });
@@ -38,7 +40,11 @@ fn create_bpf_prog(b: *std.Build, endian: std.builtin.Endian, src_path: []const 
 }
 
 fn create_vmlinux(b: *std.Build) *std.Build.Module {
-    const run_exe = b.addRunArtifact(b.dependency("btf_translator", .{ .optimize = .ReleaseFast }).artifact("btf_translator"));
+    const host = std.Build.resolveTargetQuery(b, .{});
+    const run_exe = b.addRunArtifact(b.dependency("btf_translator", .{
+        .target = host,
+        .optimize = .Debug,
+    }).artifact("btf_translator"));
 
     if (vmlinux_bin_path) |vmlinux| run_exe.addPrefixedFileArg("-vmlinux", .{ .cwd_relative = vmlinux });
     if (debugging) run_exe.addArg("-debug");
@@ -46,25 +52,6 @@ fn create_vmlinux(b: *std.Build) *std.Build.Module {
     const vmlinux_zig = run_exe.addPrefixedOutputFileArg("-o", b.fmt("vmlinux.zig", .{}));
 
     return b.addModule("vmlinux", .{ .root_source_file = vmlinux_zig });
-}
-
-fn create_btf_translator(b: *std.Build) *std.Build.Step.Compile {
-    const host = std.Build.resolveTargetQuery(b, .{});
-    const root_module = b.addModule("btf_translator", .{
-        .root_source_file = b.path("src/btf_translator/main.zig"),
-        .target = host,
-        .optimize = .ReleaseFast,
-    });
-    const exe = b.addExecutable(.{
-        .name = "btf_translator",
-        .root_module = root_module,
-    });
-
-    exe.linkLibrary(get_libbpf(b, host, .ReleaseFast));
-    exe.linkLibC();
-    b.installArtifact(exe);
-
-    return exe;
 }
 
 fn create_bpf(b: *std.Build) *std.Build.Module {
@@ -90,7 +77,7 @@ pub fn build(b: *std.Build) !void {
 
     try create_test_step(b, target, optimize, test_filter);
     //try create_fuzz_test_step(b, target, optimize, test_filter);
-    try create_docs_step(b);
+    try create_docs_step(b, optimize);
 }
 
 fn create_main_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
@@ -178,6 +165,7 @@ fn create_target_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize:
             .root_source_file = b.path(main_path),
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
         }),
     });
     exe.root_module.addAnonymousImport("@bpf_prog", .{
@@ -187,7 +175,6 @@ fn create_target_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize:
     exe.root_module.addImport("vmlinux", b.modules.get("vmlinux").?);
 
     exe.linkLibrary(get_libbpf(b, target, optimize));
-    exe.linkLibC();
 
     const description = b.fmt("Build {s}", .{exe_name});
     const build_step = b.step(exe_name, description);
@@ -210,12 +197,12 @@ fn create_test_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: s
             .root_source_file = b.path("src/tests/root.zig"),
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
         }),
         .filters = if (test_filter) |f| &.{f} else &.{},
     });
     exe_tests.linkLibrary(get_libbpf(b, target, optimize));
     exe_tests.root_module.addImport("bpf", b.modules.get("bpf").?);
-    exe_tests.linkLibC();
     exe_tests.setExecCmd(&.{ "sudo", null });
 
     // Create bpf programs for test
@@ -256,7 +243,11 @@ fn create_test_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: s
     test_tool_trace_step.dependOn(&run_trace_script.step);
 
     // run btf_translator test
-    const run_btf_translator_test = b.dependency("btf_translator", .{ .optimize = .ReleaseFast }).builder.top_level_steps.get("test").?;
+    const run_btf_translator_test = b.dependency("btf_translator", .{
+        .target = target,
+        .optimize = .ReleaseFast,
+        .@"test" = if (test_filter) |f| f else "",
+    }).builder.top_level_steps.get("test").?;
     const test_btf_translator_step = b.step("test-btf-translator", "Build and run btf_translator unit tests");
     test_btf_translator_step.dependOn(&run_btf_translator_test.step);
 
@@ -267,6 +258,7 @@ fn create_test_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: s
             .target = target,
             .optimize = optimize,
         }),
+        .filters = if (test_filter) |f| &.{f} else &.{},
     });
     vmlinux_test.root_module.addImport("vmlinux", b.modules.get("vmlinux").?);
     const test_vmlinux_step = b.step("test-vmlinux", "Build vmlinux unit test");
@@ -322,11 +314,11 @@ fn create_vmlinux_offset_test_step(b: *std.Build, target: std.Build.ResolvedTarg
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/tests/gen_vmlinux_offset_tests.zig"),
             .target = host,
-            .optimize = .ReleaseFast,
+            .optimize = optimize,
+            .link_libc = true,
         }),
     });
     generator.linkLibrary(get_libbpf(b, host, .ReleaseFast));
-    generator.linkLibC();
     const run_exe = b.addRunArtifact(generator);
 
     if (vmlinux_bin_path) |vmlinux| run_exe.addPrefixedFileArg("-vmlinux", .{ .cwd_relative = vmlinux });
@@ -350,7 +342,7 @@ fn create_vmlinux_offset_test_step(b: *std.Build, target: std.Build.ResolvedTarg
     return step;
 }
 
-fn create_docs_step(b: *std.Build) !void {
+fn create_docs_step(b: *std.Build, optimize: std.builtin.OptimizeMode) !void {
     const exe = b.addObject(.{
         .name = "docs",
         .root_module = b.createModule(.{
@@ -359,7 +351,7 @@ fn create_docs_step(b: *std.Build) !void {
                 .cpu_arch = .bpfeb,
                 .os_tag = .freestanding,
             }),
-            .optimize = .Debug,
+            .optimize = optimize,
         }),
     });
 

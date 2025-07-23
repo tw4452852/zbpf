@@ -10,6 +10,7 @@ pub fn build(b: *std.Build) !void {
         .root_source_file = b.path("main.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
 
     const exe = b.addExecutable(.{
@@ -17,7 +18,6 @@ pub fn build(b: *std.Build) !void {
         .root_module = mod,
     });
     exe.linkLibrary(libbpf);
-    exe.linkLibC();
     b.installArtifact(exe);
 
     const test_filter = b.option([]const u8, "test", "test filter");
@@ -26,7 +26,6 @@ pub fn build(b: *std.Build) !void {
         .filters = if (test_filter) |f| &.{f} else &.{},
     });
     test_exe.linkLibrary(libbpf);
-    test_exe.linkLibC();
     const run_test = b.addRunArtifact(test_exe);
     const test_step = b.step("test", "Build and run unit tests");
     test_step.dependOn(&run_test.step);

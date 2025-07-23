@@ -42,9 +42,12 @@ test "trace_printk" {
         }
         try testing.expectEqual(std.fmt.count("{}", .{arg}), attr.retval);
 
-        const r = f.reader();
-        const l = try r.readUntilDelimiterAlloc(allocator, '\n', std.math.maxInt(u32));
-        defer allocator.free(l);
-        try testing.expectStringEndsWith(l, "bpf_trace_printk: 123");
+        var aw: std.Io.Writer.Allocating = .init(allocator);
+        defer aw.deinit();
+        var fb: [128]u8 = undefined;
+        var fr = f.reader(&fb);
+        _ = try std.Io.Reader.streamDelimiterLimit(&fr.interface, &aw.writer, '\n', .unlimited);
+
+        try testing.expectStringEndsWith(aw.getWritten(), "bpf_trace_printk: 123");
     }
 }

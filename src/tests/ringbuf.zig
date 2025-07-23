@@ -54,7 +54,7 @@ test "ringbuf" {
         const expected_count = 3;
         const expected_str = "1" ** expected_count;
         for (0..expected_count) |_| {
-            std.time.sleep(11);
+            std.Thread.sleep(11);
         }
 
         const n = libbpf.ring_buffer__consume(ring_buf);
@@ -73,7 +73,7 @@ const Ctx = extern struct {
     got: *std.ArrayList(u8),
 };
 
-fn on_sample(_ctx: ?*anyopaque, _data: ?*anyopaque, _: usize) callconv(.C) c_int {
+fn on_sample(_ctx: ?*anyopaque, _data: ?*anyopaque, _: usize) callconv(.c) c_int {
     var ctx: *Ctx = @ptrCast(@alignCast(_ctx.?));
     const c: *const u8 = @ptrCast(_data.?);
 

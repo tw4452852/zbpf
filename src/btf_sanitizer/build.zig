@@ -8,6 +8,7 @@ pub fn build(b: *std.Build) !void {
         .root_source_file = b.path("main.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
 
     const exe = b.addExecutable(.{
@@ -17,7 +18,6 @@ pub fn build(b: *std.Build) !void {
 
     exe.linkLibrary(b.dependency("libelf", .{ .target = target, .optimize = optimize }).artifact("elf"));
     exe.linkLibrary(b.dependency("libbpf", .{ .target = target, .optimize = optimize }).artifact("bpf"));
-    exe.linkLibC();
     exe.addIncludePath(b.path("."));
     b.installArtifact(exe);
 }

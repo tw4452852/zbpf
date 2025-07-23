@@ -29,7 +29,8 @@ test "iterator" {
         const fd = libbpf.bpf_iter_create(libbpf.bpf_link__fd(link));
         const f = std.fs.File{ .handle = fd };
         defer f.close();
-        var r = f.reader();
+        var fb: [@sizeOf(u64)]u8 = undefined;
+        var r = f.reader(&fb);
 
         const expect = blk: {
             var n: u64 = 0;
@@ -46,7 +47,7 @@ test "iterator" {
         var got: u64 = undefined;
         const native_endian = @import("builtin").target.cpu.arch.endian();
         while (true) {
-            got = r.readInt(u64, native_endian) catch |e| switch (e) {
+            got = r.interface.takeInt(u64, native_endian) catch |e| switch (e) {
                 error.EndOfStream => break,
                 else => return e,
             };

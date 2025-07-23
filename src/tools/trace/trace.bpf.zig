@@ -53,7 +53,7 @@ fn generate(comptime id: u32, comptime tf: build_options.TraceFunc) type {
             break :es size;
         };
 
-        fn _entry(ctx: *F.Ctx()) linksection(F.entry_section()) callconv(.C) c_long {
+        fn _entry(ctx: *F.Ctx()) linksection(F.entry_section()) callconv(.c) c_long {
             const tpid = helpers.get_current_pid_tgid();
             const BPF_F_REUSE_STACKID = 1 << 10;
             const BPF_F_USER_STACK = 1 << 8;
@@ -91,7 +91,7 @@ fn generate(comptime id: u32, comptime tf: build_options.TraceFunc) type {
             } });
         }
 
-        fn _exit(ctx: *F.Ctx()) linksection(F.exit_section()) callconv(.C) c_long {
+        fn _exit(ctx: *F.Ctx()) linksection(F.exit_section()) callconv(.c) c_long {
             const tpid = helpers.get_current_pid_tgid();
             const resv = events.reserve(TRACE_RECORD, exit_extra_size);
 

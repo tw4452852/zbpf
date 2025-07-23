@@ -9,14 +9,14 @@ const exit = bpf.exit;
 var buffer = bpf.Map.HashMap("buffer", u64, REGS, 0xffff, 0).init();
 var events = bpf.Map.RingBuffer("events", 16, 0).init();
 
-export fn test_kmulprobe(regs: *REGS) linksection("kprobe.multi") callconv(.C) c_long {
+export fn test_kmulprobe(regs: *REGS) linksection("kprobe.multi") callconv(.c) c_long {
     const tpid = helpers.get_current_pid_tgid();
     buffer.update(.any, tpid, regs.*);
 
     return 0;
 }
 
-export fn test_kmulretprobe(regs: *REGS) linksection("kretprobe.multi") callconv(.C) c_long {
+export fn test_kmulretprobe(regs: *REGS) linksection("kretprobe.multi") callconv(.c) c_long {
     const tpid = helpers.get_current_pid_tgid();
     if (buffer.lookup(tpid)) |v| {
         const resv = events.reserve(REGS, 0);

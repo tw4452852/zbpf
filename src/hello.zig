@@ -46,7 +46,7 @@ pub fn main() !void {
         const perf_buf = libbpf.perf_buffer__new(libbpf.bpf_map__fd(events), 1, on_sample, null, null, null).?;
         defer libbpf.perf_buffer__free(perf_buf);
 
-        std.time.sleep(11);
+        std.Thread.sleep(11);
 
         ret = libbpf.perf_buffer__consume(perf_buf);
         if (ret != 0) {
@@ -56,7 +56,7 @@ pub fn main() !void {
     }
 }
 
-fn on_sample(_: ?*anyopaque, cpu: c_int, data: ?*anyopaque, _: u32) callconv(.C) void {
+fn on_sample(_: ?*anyopaque, cpu: c_int, data: ?*anyopaque, _: u32) callconv(.c) void {
     const s = std.mem.sliceTo(@as([*c]const u8, @ptrCast(data)), 0);
 
     print("Receive {s} from CPU{}\n", .{ s, cpu });

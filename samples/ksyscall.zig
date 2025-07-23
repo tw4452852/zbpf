@@ -6,7 +6,7 @@ var exit = bpf.Map.ArrayMap("exit", i64, 1, 0).init();
 
 const tracked_syscall = bpf.Ksyscall{ .name = "getxattr" };
 
-export fn test_ksyscall(args: *tracked_syscall.Ctx()) linksection(tracked_syscall.entry_section()) callconv(.C) c_long {
+export fn test_ksyscall(args: *tracked_syscall.Ctx()) linksection(tracked_syscall.entry_section()) callconv(.c) c_long {
     const arg0 = args.arg0();
     const arg1 = args.arg1();
     const arg2 = args.arg2();
@@ -16,7 +16,7 @@ export fn test_ksyscall(args: *tracked_syscall.Ctx()) linksection(tracked_syscal
     return 0;
 }
 
-export fn test_kretsyscall(args: *tracked_syscall.Ctx()) linksection(tracked_syscall.exit_section()) callconv(.C) c_long {
+export fn test_kretsyscall(args: *tracked_syscall.Ctx()) linksection(tracked_syscall.exit_section()) callconv(.c) c_long {
     const ret = args.ret();
     exit.update(.any, 0, @intCast(ret));
     return 0;

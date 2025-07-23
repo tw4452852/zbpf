@@ -12,7 +12,7 @@ const tp = bpf.Tracepoint{
     .name = "sched_switch",
 };
 
-export fn test_stacktrace(ctx: *tp.Ctx()) linksection(tp.section()) callconv(.C) c_int {
+export fn test_stacktrace(ctx: *tp.Ctx()) linksection(tp.section()) callconv(.c) c_int {
     if (indexmap.lookup(0)) |i| {
         if (i.* < 0) {
             const index = stackmap.get_current_stack(ctx, 0);

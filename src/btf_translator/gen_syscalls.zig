@@ -10,7 +10,7 @@ pub fn main() !void {
     const tree = try std.json.parseFromSlice(std.json.Value, gpa, input, .{});
     const syscalls = tree.value.object.get("syscalls").?;
 
-    const w = std.io.getStdOut().writer();
+    const w = std.fs.File.stdout();
     for (syscalls.array.items) |syscall| {
         const args = syscall.object.get("signature").?.array.items;
         try w.print("pub const {s} = fn (", .{syscall.object.get("origname").?.string});

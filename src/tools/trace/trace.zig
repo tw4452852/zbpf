@@ -25,10 +25,10 @@ var exiting = false;
 var debug = false;
 var testing = false;
 
-fn dbg_printf(level: libbpf.libbpf_print_level, fmt: [*c]const u8, args: @typeInfo(@typeInfo(@typeInfo(libbpf.libbpf_print_fn_t).optional.child).pointer.child).@"fn".params[2].type.?) callconv(.C) c_int {
+fn dbg_printf(level: libbpf.libbpf_print_level, fmt: [*c]const u8, args: @typeInfo(@typeInfo(@typeInfo(libbpf.libbpf_print_fn_t).optional.child).pointer.child).@"fn".params[2].type.?) callconv(.c) c_int {
     if (!debug and level == libbpf.LIBBPF_DEBUG) return 0;
 
-    return libbpf.vdprintf(std.io.getStdErr().handle, fmt, args);
+    return libbpf.vdprintf(std.fs.File.stderr().handle, fmt, args);
 }
 
 fn usage() void {
@@ -138,8 +138,9 @@ pub fn main() !void {
     var add2line_opt = if (vmlinux_path) |p| Addr2Line.init(allocator, p, stext_runtime) catch null else null;
     defer if (add2line_opt) |*al| al.deinit();
 
+    var sw = std.fs.File.stdout().writerStreaming(&.{});
     var ctx: Ctx = .{
-        .stdout = std.io.getStdOut().writer(),
+        .stdout = sw,
         .stackmap = libbpf.bpf_object__find_map_by_name(obj, "stackmap"),
         .al = if (add2line_opt) |*al| al else null,
         .ksyms = if (ksyms) |*ks| ks else null,
@@ -160,7 +161,7 @@ pub fn main() !void {
     }
 
     setup_ctrl_c();
-    print("Tracing...\n", .{});
+    try sw.interface.writeAll("Tracing...\n");
     if (testing) {
         _ = testing_call(1, 2);
     }
@@ -189,7 +190,7 @@ pub fn main() !void {
     }
 }
 
-fn interrupt_handler(_: c_int) callconv(.C) void {
+fn interrupt_handler(_: c_int) callconv(.c) void {
     exiting = true;
 }
 
@@ -210,14 +211,14 @@ const Ctx = struct {
     allocator: std.mem.Allocator,
 };
 
-fn on_sample(_ctx: ?*anyopaque, data: ?*anyopaque, _: usize) callconv(.C) c_int {
+fn on_sample(_ctx: ?*anyopaque, data: ?*anyopaque, _: usize) callconv(.c) c_int {
     const ctx: *Ctx = @alignCast(@ptrCast(_ctx));
     const record: *TRACE_RECORD = @alignCast(@ptrCast(data.?));
 
     // kprobes at first, then syscalls
     switch (record.id) {
         inline 0...tracing_funcs.len - 1 => |i| {
-            Args(tracing_funcs[i]).print(record, ctx.stdout);
+            Args(tracing_funcs[i]).print(record, &ctx.stdout);
 
             if (record.stack_id >= 0) {
                 var entries: STACK_TRACE = undefined;
@@ -225,41 +226,41 @@ fn on_sample(_ctx: ?*anyopaque, data: ?*anyopaque, _: usize) callconv(.C) c_int 
                     return -1;
                 }
 
-                ctx.stdout.writeAll("Stack:\n") catch return -1;
+                ctx.stdout.interface.writeAll("Stack:\n") catch return -1;
                 for (entries) |entry| {
                     if (entry == 0) break;
 
-                    ctx.stdout.print("0x{x}", .{entry}) catch return -1;
+                    ctx.stdout.interface.print("0x{x}", .{entry}) catch return -1;
                     const syms_opt = if (tracing_funcs[i].kind == .uprobe) null else ctx.ksyms;
                     if (syms_opt) |syms| {
                         if (syms.find(entry)) |sym| {
-                            ctx.stdout.print(" {s}", .{sym.name}) catch return -1;
+                            ctx.stdout.interface.print(" {s}", .{sym.name}) catch return -1;
                             if (entry > sym.addr) {
-                                ctx.stdout.print("+0x{x}", .{entry - sym.addr}) catch return -1;
+                                ctx.stdout.interface.print("+0x{x}", .{entry - sym.addr}) catch return -1;
                             }
                         }
                     }
                     const al_opt = if (tracing_funcs[i].kind == .uprobe) null else ctx.al;
                     if (al_opt) |al| {
                         if (al.find(entry)) |l| {
-                            ctx.stdout.print(" {s}:{d}:{d}", .{ l.file_name, l.line, l.column }) catch return -1;
+                            ctx.stdout.interface.print(" {s}:{d}:{d}", .{ l.file_name, l.line, l.column }) catch return -1;
                             ctx.allocator.free(l.file_name);
                         }
                     }
-                    ctx.stdout.print("\n", .{}) catch return -1;
+                    ctx.stdout.interface.print("\n", .{}) catch return -1;
                 }
             }
 
             if (record.lbr_size > 0) {
                 const lbrs: [*]align(1) vmlinux.perf_branch_entry = @ptrFromInt(@intFromPtr(record) + @sizeOf(TRACE_RECORD) + record.arg_size);
-                ctx.stdout.writeAll("LBRs:\n") catch return -1;
+                ctx.stdout.interface.writeAll("LBRs:\n") catch return -1;
                 for (0..@divExact(@as(usize, @intCast(record.lbr_size)), @sizeOf(vmlinux.perf_branch_entry))) |idx| {
-                    ctx.stdout.print("{}: 0x{x} -> 0x{x}\n", .{ idx, lbrs[idx].from, lbrs[idx].to }) catch return -1;
+                    ctx.stdout.interface.print("{}: 0x{x} -> 0x{x}\n", .{ idx, lbrs[idx].from, lbrs[idx].to }) catch return -1;
                 }
             }
         },
 
-        else => ctx.stdout.print("Unknown function id: {}\n", .{record.id}) catch return -1,
+        else => ctx.stdout.interface.print("Unknown function id: {}\n", .{record.id}) catch return -1,
     }
 
     return 0;
@@ -273,7 +274,7 @@ fn Args(comptime tf: TraceFunc) type {
         ) void {
             const pid: u32 = @truncate(record.tpid);
 
-            writer.print("pid: {}, {s} {s} {s}:\n", .{ pid, @tagName(tf.kind), tf.name, if (record.entry) "enter" else "exit" }) catch {};
+            writer.interface.print("pid: {}, {s} {s} {s}:\n", .{ pid, @tagName(tf.kind), tf.name, if (record.entry) "enter" else "exit" }) catch {};
             var extra: usize = @intFromPtr(record) + @sizeOf(TRACE_RECORD);
             if (record.entry) {
                 inline for (tf.args) |spec| {
@@ -283,7 +284,7 @@ fn Args(comptime tf: TraceFunc) type {
                         const placeholder = comptime Arg.placeholder(spec);
                         const is_string = comptime std.mem.eql(u8, placeholder, "{s}");
                         const v: *align(1) const T = @ptrFromInt(extra);
-                        writer.print("{s}: " ++ placeholder ++ "\n", .{ spec, if (is_string) std.mem.sliceTo(v, 0) else v.* }) catch {};
+                        writer.interface.print("{s}: " ++ placeholder ++ "\n", .{ spec, if (is_string) std.mem.sliceTo(v, 0) else v.* }) catch {};
                         extra += @sizeOf(T);
                     }
                 }
@@ -295,7 +296,7 @@ fn Args(comptime tf: TraceFunc) type {
                         const placeholder = comptime Arg.placeholder(spec);
                         const is_string = comptime std.mem.eql(u8, placeholder, "{s}");
                         const v: *align(1) const T = @ptrFromInt(extra);
-                        writer.print("{s}: " ++ placeholder ++ "\n", .{ spec, if (is_string) std.mem.sliceTo(v, 0) else v.* }) catch {};
+                        writer.interface.print("{s}: " ++ placeholder ++ "\n", .{ spec, if (is_string) std.mem.sliceTo(v, 0) else v.* }) catch {};
                         extra += @sizeOf(T);
                     }
                 }
@@ -316,20 +317,23 @@ const Ksyms = struct {
     pub fn init(allocator: std.mem.Allocator) !Ksyms {
         const f = try std.fs.openFileAbsolute("/proc/kallsyms", .{});
         defer f.close();
-        var br = std.io.bufferedReader(f.reader());
-        const r = br.reader();
+        var line_buf: [256]u8 = undefined;
+        var r = f.reader(&line_buf);
         var entries = std.ArrayList(Entry).init(allocator);
         errdefer entries.deinit();
         var stext: ?u64 = null;
 
-        while (try r.readUntilDelimiterOrEofAlloc(allocator, '\n', std.math.maxInt(usize))) |line| {
+        while (r.interface.takeDelimiterExclusive('\n')) |line| {
             var it = std.mem.tokenizeScalar(u8, line, ' ');
             const addr = try std.fmt.parseInt(u64, it.next().?, 16);
             const t = it.next().?; // type
             if (!std.ascii.eqlIgnoreCase(t, "t")) continue;
             const name = it.next().?;
-            try entries.append(.{ .name = name, .addr = addr });
+            try entries.append(.{ .name = try allocator.dupe(u8, name), .addr = addr });
             if (std.mem.eql(u8, name, "_stext")) stext = addr;
+        } else |err| switch (err) {
+            error.EndOfStream => {},
+            else => |e| return e,
         }
 
         std.mem.sortUnstable(Entry, entries.items, {}, struct {
@@ -360,6 +364,7 @@ const Ksyms = struct {
     }
 
     pub fn deinit(self: *Ksyms, allocator: std.mem.Allocator) void {
+        for (self.syms) |sym| allocator.free(sym.name);
         allocator.free(self.syms);
         self.* = undefined;
     }

@@ -43,9 +43,12 @@ test "panic" {
         }
         try testing.expectEqual(@as(c_long, 0), attr.retval);
 
-        const r = f.reader();
-        const l = try r.readUntilDelimiterAlloc(allocator, '\n', std.math.maxInt(u32));
-        defer allocator.free(l);
-        try testing.expectStringEndsWith(l, "trace_printk: Panic: test");
+        var aw: std.Io.Writer.Allocating = .init(allocator);
+        defer aw.deinit();
+        var fb: [128]u8 = undefined;
+        var fr = f.reader(&fb);
+        _ = try std.Io.Reader.streamDelimiterLimit(&fr.interface, &aw.writer, '\n', .unlimited);
+
+        try testing.expectStringEndsWith(aw.getWritten(), "trace_printk: Panic: test");
     }
 }

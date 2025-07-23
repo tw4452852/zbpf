@@ -97,7 +97,7 @@ const Ctx = extern struct {
     arg2: i32,
 };
 
-fn on_sample(_ctx: ?*anyopaque, _data: ?*anyopaque, _: usize) callconv(.C) c_int {
+fn on_sample(_ctx: ?*anyopaque, _data: ?*anyopaque, _: usize) callconv(.c) c_int {
     var ctx: *Ctx = @ptrCast(@alignCast(_ctx.?));
     const args: *REGS = @alignCast(@ptrCast(_data.?));
 

@@ -54,7 +54,7 @@ test "perf_event" {
         const expected_count = 3;
         const expected_str = "hello" ** expected_count;
         for (0..expected_count) |_| {
-            std.time.sleep(11);
+            std.Thread.sleep(11);
         }
 
         ret = libbpf.perf_buffer__consume(perf_buf);
@@ -73,7 +73,7 @@ const Ctx = extern struct {
     got: *std.ArrayList(u8),
 };
 
-fn on_sample(_ctx: ?*anyopaque, _: c_int, data: ?*anyopaque, _: u32) callconv(.C) void {
+fn on_sample(_ctx: ?*anyopaque, _: c_int, data: ?*anyopaque, _: u32) callconv(.c) void {
     var ctx: *Ctx = @ptrCast(@alignCast(_ctx.?));
     const s = std.mem.sliceTo(@as([*c]const u8, @ptrCast(data)), 0);
 

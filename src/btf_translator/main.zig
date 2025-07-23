@@ -23,7 +23,7 @@ pub fn main() !void {
 
     var it = std.process.args();
     _ = it.skip(); // skip process name
-    var output: std.fs.File = std.io.getStdOut();
+    var output = std.fs.File.stdout();
     var vmlinux_arg: ?[:0]const u8 = null;
     var include_syscalls = false;
     while (it.next()) |arg| {
@@ -49,15 +49,15 @@ pub fn main() !void {
 
     defer output.close();
     const result = try translate(gpa, btf);
-    const w = output.writer();
-    try w.writeAll("pub const Kernel = @This();\n");
-    try w.writeAll("pub const @\"void\" = anyopaque;\n");
-    try w.writeAll(result);
+    var w = output.writer(&.{});
+    try w.interface.writeAll("pub const Kernel = @This();\n");
+    try w.interface.writeAll("pub const @\"void\" = anyopaque;\n");
+    try w.interface.writeAll(result);
     if (include_syscalls) {
         const syscalls = @embedFile("syscalls.zig");
-        try w.writeAll("pub const kernel_syscalls = struct {\n");
-        try w.writeAll(syscalls);
-        try w.writeAll("};\n");
+        try w.interface.writeAll("pub const kernel_syscalls = struct {\n");
+        try w.interface.writeAll(syscalls);
+        try w.interface.writeAll("};\n");
     }
 }
 
@@ -96,7 +96,7 @@ const Context = struct {
     fn addIdentifier(ctx: *Context, bytes: []const u8) Allocator.Error!TokenIndex {
         if (std.zig.primitives.isPrimitive(bytes))
             return ctx.addTokenFmt(.identifier, "@\"{s}\"", .{bytes});
-        return ctx.addTokenFmt(.identifier, "{p}", .{std.zig.fmtId(bytes)});
+        return ctx.addTokenFmt(.identifier, "{f}", .{std.zig.fmtId(bytes)});
     }
 
     fn listToSpan(ctx: *Context, list: []const NodeIndex) Allocator.Error!NodeSubRange {
@@ -344,8 +344,8 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                 try members.append(try ctx.addNode(.{
                     .tag = .container_field_init,
                     .main_token = name_tok,
-                    .data = .{ .opt_node_and_opt_node = .{
-                        .none,
+                    .data = .{ .node_and_opt_node = .{
+                        arg_node,
                         init_tok.toOptional(),
                     } },
                 }));
@@ -910,11 +910,11 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
     defer tree.deinit(gpa);
     defer gpa.free(tree.source);
 
-    var buffer = std.ArrayList(u8).init(gpa);
-    defer buffer.deinit();
-    try tree.renderToArrayList(&buffer, .{});
+    var aw: std.Io.Writer.Allocating = .init(gpa);
+    defer aw.deinit();
+    try tree.render(gpa, &aw.writer, .{});
 
-    return buffer.toOwnedSliceSentinel(0);
+    return aw.toOwnedSliceSentinel(0);
 }
 
 fn verify_generated(source_code: [:0]const u8, gpa: std.mem.Allocator) !void {

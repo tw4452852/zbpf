@@ -8,10 +8,10 @@ pub const libbpf = @cImport({
     @cInclude("bpf.h");
     @cInclude("btf.h");
 });
-pub fn dbg_printf(level: libbpf.libbpf_print_level, fmt: [*c]const u8, args: @typeInfo(@typeInfo(@typeInfo(libbpf.libbpf_print_fn_t).optional.child).pointer.child).@"fn".params[2].type.?) callconv(.C) c_int {
+pub fn dbg_printf(level: libbpf.libbpf_print_level, fmt: [*c]const u8, args: @typeInfo(@typeInfo(@typeInfo(libbpf.libbpf_print_fn_t).optional.child).pointer.child).@"fn".params[2].type.?) callconv(.c) c_int {
     if (!build_options.debug and level == libbpf.LIBBPF_DEBUG) return 0;
 
-    return libbpf.vdprintf(std.io.getStdErr().handle, fmt, args);
+    return libbpf.vdprintf(std.fs.File.stderr().handle, fmt, args);
 }
 
 pub fn btf_name_exist(name: []const u8) bool {
@@ -26,7 +26,7 @@ const tracefs_mount_dir = "./tracefs";
 
 pub fn open_tracebuf_pipe(clean: bool) !std.fs.File {
     const cwd = std.fs.cwd();
-    try cwd.makeDir(tracefs_mount_dir);
+    cwd.makeDir(tracefs_mount_dir) catch |e| if (e != error.PathAlreadyExists) return e;
     const ret = std.posix.errno(std.os.linux.mount("zbpf_test", tracefs_mount_dir, "tracefs", 0, 0));
     if (ret != .SUCCESS) return error.MOUNT;
 
