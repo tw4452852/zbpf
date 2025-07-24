@@ -326,7 +326,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                 const is_neg = signed and if (kind == .enum64) @clz(c.btf_enum64_value(&val64s[vi])) == 0 else @clz(vals[vi].val) == 0;
                 const abs_val: u64 =
                     if (kind == .enum64 and is_neg) @abs(@as(i64, @bitCast(c.btf_enum64_value(&val64s[vi])))) else if (kind == .@"enum" and is_neg) @abs(vals[vi].val) else if (kind == .enum64) c.btf_enum64_value(&val64s[vi]) else @intCast(@as(u32, @bitCast(vals[vi].val)));
-                const init_tok = if (is_neg) try ctx.addNode(.{
+                const init_node = if (is_neg) try ctx.addNode(.{
                     .tag = .negation,
                     .main_token = try ctx.addToken(.minus, "-"),
                     .data = .{
@@ -345,8 +345,12 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                     .tag = .container_field_init,
                     .main_token = name_tok,
                     .data = .{ .node_and_opt_node = .{
-                        arg_node,
-                        init_tok.toOptional(),
+                        try ctx.addNode(.{
+                            .tag = .identifier,
+                            .main_token = name_tok,
+                            .data = undefined,
+                        }),
+                        init_node.toOptional(),
                     } },
                 }));
                 _ = try ctx.addToken(.comma, ",");
