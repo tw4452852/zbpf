@@ -161,8 +161,6 @@ fn create_trace_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
 }
 
 fn create_target_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, main_path: []const u8, prog: std.Build.LazyPath, exe_name: []const u8) *std.Build.Step.Compile {
-    const options = b.addOptions();
-    options.addOptionPath("path", prog);
     const exe = b.addExecutable(.{
         .name = exe_name,
         .root_module = b.createModule(.{
@@ -172,7 +170,9 @@ fn create_target_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize:
             .link_libc = true,
         }),
     });
-    exe.root_module.addOptions("@bpf_prog", options);
+    exe.root_module.addAnonymousImport("@bpf_prog", .{
+        .root_source_file = prog,
+    });
     exe.root_module.addImport("bpf", b.modules.get("bpf").?);
     exe.root_module.addImport("vmlinux", b.modules.get("vmlinux").?);
 
