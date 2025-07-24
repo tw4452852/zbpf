@@ -21,9 +21,9 @@ fn create_bpf_prog(b: *std.Build, endian: std.builtin.Endian, src_path: []const 
                 .os_tag = .freestanding,
             }),
             .optimize = .ReleaseFast, // some assertions in debug mode are blocked by bpf verifier
+            .strip = false, // Otherwise BTF sections will be stripped
         }),
     });
-    prog.root_module.strip = false;
     prog.root_module.addImport("bpf", b.modules.get("bpf").?);
     prog.root_module.addImport("vmlinux", b.modules.get("vmlinux").?);
     if (build_options_opt) |build_options| prog.root_module.addImport("@build_options", build_options);
@@ -159,6 +159,8 @@ fn create_trace_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
 }
 
 fn create_target_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, main_path: []const u8, prog: std.Build.LazyPath, exe_name: []const u8) *std.Build.Step.Compile {
+    const options = b.addOptions();
+    options.addOptionPath("path", prog);
     const exe = b.addExecutable(.{
         .name = exe_name,
         .root_module = b.createModule(.{
@@ -168,9 +170,7 @@ fn create_target_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize:
             .link_libc = true,
         }),
     });
-    exe.root_module.addAnonymousImport("@bpf_prog", .{
-        .root_source_file = prog,
-    });
+    exe.root_module.addOptions("@bpf_prog", options);
     exe.root_module.addImport("bpf", b.modules.get("bpf").?);
     exe.root_module.addImport("vmlinux", b.modules.get("vmlinux").?);
 
@@ -206,6 +206,8 @@ fn create_test_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: s
     exe_tests.setExecCmd(&.{ "sudo", null });
 
     // Create bpf programs for test
+    const build_options = b.addOptions();
+    build_options.addOption(bool, "debug", debugging);
     var sample_dir = try fs.cwd().openDir("samples", .{ .iterate = true });
     defer sample_dir.close();
     var it = sample_dir.iterate();
@@ -215,20 +217,10 @@ fn create_test_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: s
                 continue;
             }
         }
-        const bpf_prog = create_bpf_prog(b, target.result.cpu.arch.endian(), try fs.path.join(b.allocator, &.{ "samples", entry.name }), null);
-        exe_tests.root_module.addAnonymousImport(try std.fmt.allocPrint(b.allocator, "@{s}", .{fs.path.stem(entry.name)}), .{
-            .root_source_file = bpf_prog,
-        });
+        const prog = create_bpf_prog(b, target.result.cpu.arch.endian(), try fs.path.join(b.allocator, &.{ "samples", entry.name }), null);
+        build_options.addOptionPath(b.fmt("prog_{s}_path", .{fs.path.stem(entry.name)}), prog);
     }
-
-    // As test runner doesn't support passing arguments,
-    // we have to create a temporary file for the debugging flag
-    exe_tests.root_module.addAnonymousImport("@build_options", .{
-        .root_source_file = b.addWriteFiles().add(
-            "generated_test_build.zig",
-            b.fmt("pub const debug :bool = {s};", .{if (debugging) "true" else "false"}),
-        ),
-    });
+    exe_tests.root_module.addOptions("@build_options", build_options);
 
     const run_unit_test = b.addRunArtifact(exe_tests);
     const test_bpf_step = b.step("test-bpf", "Build and run bpf package unit tests");
@@ -286,20 +278,12 @@ fn create_fuzz_test_step(b: *std.Build, target: std.Build.ResolvedTarget, optimi
     });
     exe_tests.root_module.addImport("vmlinux", b.modules.get("vmlinux").?);
 
+    const build_options = b.addOptions();
+    build_options.addOption(bool, "debug", debugging);
+    build_options.addOption([]const u8, "zig_exe", b.graph.zig_exe);
     // As test runner doesn't support passing arguments,
     // we have to create a temporary file for the debugging flag
-    exe_tests.root_module.addAnonymousImport("@build_options", .{
-        .root_source_file = b.addWriteFiles().add(
-            "generated_test_build.zig",
-            b.fmt(
-                \\pub const debug :bool = {s};
-                \\pub const zig_exe = "{s}";
-            , .{
-                if (debugging) "true" else "false",
-                b.graph.zig_exe,
-            }),
-        ),
-    });
+    exe_tests.root_module.addOptions("@build_options", build_options);
 
     const run = b.addRunArtifact(exe_tests);
 
@@ -368,17 +352,15 @@ fn create_docs_step(b: *std.Build, optimize: std.builtin.OptimizeMode) !void {
 }
 
 fn get_libbpf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
-    _ = optimize;
     return b.dependency("libbpf", .{
         .target = target,
-        .optimize = .ReleaseFast, // WA for pointer alignment assumption of libbpf
+        .optimize = optimize,
     }).artifact("bpf");
 }
 
 fn get_libelf(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
-    _ = optimize;
     return b.dependency("libelf", .{
         .target = target,
-        .optimize = .ReleaseFast, // WA for pointer alignment assumption of libelf
+        .optimize = optimize,
     }).artifact("elf");
 }

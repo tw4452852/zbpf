@@ -68,8 +68,6 @@ pub fn main() !void {
     defer process.argsFree(allocator, args);
     var arg_idx: usize = 1; // skip exe name
 
-    const bytes = @embedFile("@bpf_prog");
-
     var seconds: ?usize = null;
     var vmlinux_path: ?[]const u8 = null;
     var max_count: ?usize = null;
@@ -107,7 +105,8 @@ pub fn main() !void {
 
     _ = libbpf.libbpf_set_print(dbg_printf);
 
-    const obj = libbpf.bpf_object__open_mem(bytes.ptr, bytes.len, null);
+    const prog_path = try allocator.dupeZ(u8, @import("@bpf_prog").path);
+    const obj = libbpf.bpf_object__open(prog_path);
     if (obj == null) {
         print("failed to open bpf object: {}\n", .{std.posix.errno(-1)});
         return error.OPEN;

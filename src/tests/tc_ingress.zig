@@ -35,11 +35,11 @@ const EEXIST: c_int = @intFromEnum(std.c.E.EXIST);
 
 // https://patchwork.kernel.org/project/netdevbpf/patch/20210512103451.989420-3-memxor@gmail.com/
 test "tc_ingress" {
-    const bytes = @embedFile("@tc_ingress");
-
     _ = libbpf.libbpf_set_print(root.dbg_printf);
 
-    const obj = libbpf.bpf_object__open_mem(bytes.ptr, bytes.len, null);
+    const path = try allocator.dupeZ(u8, @import("@build_options").prog_tc_ingress_path);
+    defer allocator.free(path);
+    const obj = libbpf.bpf_object__open(path);
     if (obj == null) {
         print("failed to open bpf object: {}\n", .{std.posix.errno(-1)});
         return error.OPEN;

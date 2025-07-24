@@ -6,11 +6,11 @@ const allocator = root.allocator;
 const libbpf = root.libbpf;
 
 test "panic" {
-    const bytes = @embedFile("@panic");
-
     _ = libbpf.libbpf_set_print(root.dbg_printf);
 
-    const obj = libbpf.bpf_object__open_mem(bytes.ptr, bytes.len, null);
+    const path = try allocator.dupeZ(u8, @import("@build_options").prog_panic_path);
+    defer allocator.free(path);
+    const obj = libbpf.bpf_object__open(path);
     if (obj == null) {
         print("failed to open bpf object: {}\n", .{std.posix.errno(-1)});
         return error.OPEN;
