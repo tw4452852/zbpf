@@ -59,11 +59,13 @@ pub inline fn panic(msg: []const u8, error_return_trace: ?*StackTrace, ret_addr:
     _ = error_return_trace;
     _ = ret_addr;
 
-    var buffer = std.BoundedArray(u8, 128).fromSlice(msg) catch exit(@src(), @as(c_long, -1));
-    buffer.append(0) catch exit(@src(), @as(c_long, -1));
+    var buffer: [128]u8 = undefined;
+    var list = std.ArrayListUnmanaged(u8).initBuffer(&buffer);
+    list.appendSliceBounded(msg) catch exit(@src(), @as(c_long, -1));
+    list.appendBounded(0) catch exit(@src(), @as(c_long, -1));
 
     const fmt = "Panic: %s";
-    _ = trace_printk(fmt, fmt.len + 1, @intFromPtr(buffer.constSlice().ptr), 0, 0);
+    _ = trace_printk(fmt, fmt.len + 1, @intFromPtr(&buffer), 0, 0);
 
     asm volatile ("exit"
         :
