@@ -211,8 +211,8 @@ const Ctx = struct {
 };
 
 fn on_sample(_ctx: ?*anyopaque, data: ?*anyopaque, _: usize) callconv(.c) c_int {
-    const ctx: *Ctx = @alignCast(@ptrCast(_ctx));
-    const record: *TRACE_RECORD = @alignCast(@ptrCast(data.?));
+    const ctx: *Ctx = @ptrCast(@alignCast(_ctx));
+    const record: *TRACE_RECORD = @ptrCast(@alignCast(data.?));
 
     // kprobes at first, then syscalls
     switch (record.id) {

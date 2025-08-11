@@ -99,7 +99,7 @@ const Ctx = extern struct {
 
 fn on_sample(_ctx: ?*anyopaque, _data: ?*anyopaque, _: usize) callconv(.c) c_int {
     var ctx: *Ctx = @ptrCast(@alignCast(_ctx.?));
-    const args: *REGS = @alignCast(@ptrCast(_data.?));
+    const args: *REGS = @ptrCast(@alignCast(_data.?));
 
     ctx.seen += 1;
     ctx.ret +%= @truncate(@as(isize, @bitCast(args.ret_ptr().*)));

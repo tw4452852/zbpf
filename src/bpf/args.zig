@@ -185,7 +185,7 @@ pub fn PT_REGS(comptime func_name: []const u8, comptime for_syscall: bool) type 
 
         /// helper function to return the underlying `REG`.
         pub inline fn get_regs(self: *Self) *REGS {
-            return @alignCast(@ptrCast(self));
+            return @ptrCast(@alignCast(self));
         }
 
         const ARG0 = if (f.@"fn".params.len < 1) @compileError("not support") else f.@"fn".params[0].type.?;
@@ -275,7 +275,7 @@ pub fn SYSCALL(comptime name: []const u8) type {
             if (!in_bpf_program) return @ptrCast(self);
 
             return if (LINUX_HAS_SYSCALL_WRAPPER)
-                @ptrFromInt(@as(*REGS, @alignCast(@ptrCast(self))).arg0_ptr().*)
+                @ptrFromInt(@as(*REGS, @ptrCast(@alignCast(self))).arg0_ptr().*)
             else
                 @ptrCast(self);
         }

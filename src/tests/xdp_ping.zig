@@ -47,8 +47,8 @@ test "xdp_ping" {
     }
     defer _ = libbpf.bpf_xdp_detach(@intCast(idx), c.XDP_FLAGS_UPDATE_IF_NOEXIST, null);
 
-    const expected: u32 = @as(*const u32, @alignCast(@ptrCast("ipv4"))).*;
-    const expected6: u32 = @as(*const u32, @alignCast(@ptrCast("ipv6"))).*;
+    const expected: u32 = @as(*const u32, @ptrCast(@alignCast("ipv4"))).*;
+    const expected6: u32 = @as(*const u32, @ptrCast(@alignCast("ipv6"))).*;
 
     var buf: [16]u8 = undefined;
     const pattern = try std.fmt.bufPrint(&buf, "{x}", .{expected});

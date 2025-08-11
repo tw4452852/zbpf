@@ -275,7 +275,7 @@ pub fn RingBuffer(
             }
         } {
             if (helpers.ringbuf_reserve(&@TypeOf(self.map).def, @sizeOf(T) + trailing_size, 0)) |ptr| return .{
-                .header_ptr = @alignCast(@ptrCast(ptr)),
+                .header_ptr = @ptrCast(@alignCast(ptr)),
                 .trail_ptr = @ptrFromInt(@intFromPtr(ptr) + @sizeOf(T)),
             } else exit(@src(), @as(c_long, -1));
         }

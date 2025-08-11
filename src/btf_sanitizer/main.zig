@@ -155,7 +155,7 @@ pub fn main() !void {
                 print("failed to get symbol section data: {}\n", .{std.posix.errno(-1)});
                 return error.PARSE;
             };
-            const syms: [*c]c.Elf64_Sym = @alignCast(@ptrCast(data.d_buf));
+            const syms: [*c]c.Elf64_Sym = @ptrCast(@alignCast(data.d_buf));
 
             for (0..shdr.sh_size / shdr.sh_entsize) |i| {
                 const sym: c.Elf64_Sym = syms[i];

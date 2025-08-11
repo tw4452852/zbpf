@@ -26,22 +26,22 @@ pub fn Ctx(comptime _: Self) type {
         const Impl = @This();
 
         pub fn arg0(self: *Impl) c_ulong {
-            return Args.REGS.arg0_ptr(@alignCast(@ptrCast(self))).*;
+            return Args.REGS.arg0_ptr(@ptrCast(@alignCast(self))).*;
         }
         pub fn arg1(self: *Impl) c_ulong {
-            return Args.REGS.arg1_ptr(@alignCast(@ptrCast(self))).*;
+            return Args.REGS.arg1_ptr(@ptrCast(@alignCast(self))).*;
         }
         pub fn arg2(self: *Impl) c_ulong {
-            return Args.REGS.arg2_ptr(@alignCast(@ptrCast(self))).*;
+            return Args.REGS.arg2_ptr(@ptrCast(@alignCast(self))).*;
         }
         pub fn arg3(self: *Impl) c_ulong {
-            return Args.REGS.arg3_ptr(@alignCast(@ptrCast(self))).*;
+            return Args.REGS.arg3_ptr(@ptrCast(@alignCast(self))).*;
         }
         pub fn arg4(self: *Impl) c_ulong {
-            return Args.REGS.arg4_ptr(@alignCast(@ptrCast(self))).*;
+            return Args.REGS.arg4_ptr(@ptrCast(@alignCast(self))).*;
         }
         pub fn ret(self: *Impl) c_ulong {
-            return Args.REGS.ret_ptr(@alignCast(@ptrCast(self))).*;
+            return Args.REGS.ret_ptr(@ptrCast(@alignCast(self))).*;
         }
     };
 }

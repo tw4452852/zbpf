@@ -71,7 +71,7 @@ test "tc_ingress" {
     // https://github.com/libbpf/libbpf/blob/324f3c3846d99c8a1e1384a55591f893f0ae5de4/src/netlink.c#L616
     // If there is already a qdisc hook on the interface, it will return -EEXIST.
     // We can ignore this error and continue to attach the program to the existing hook.
-    ret = libbpf.bpf_tc_hook_create(@alignCast(@ptrCast(&hook)));
+    ret = libbpf.bpf_tc_hook_create(@ptrCast(@alignCast(&hook)));
     if (ret < 0) {
         if (ret == -EEXIST) {
             print("there's already a qdisc hook on the interface, attaching to it...\n", .{});
@@ -100,8 +100,8 @@ test "tc_ingress" {
         }
     }
 
-    const expected: u32 = @as(*const u32, @alignCast(@ptrCast("ipv4"))).*;
-    const expected6: u32 = @as(*const u32, @alignCast(@ptrCast("ipv6"))).*;
+    const expected: u32 = @as(*const u32, @ptrCast(@alignCast("ipv4"))).*;
+    const expected6: u32 = @as(*const u32, @ptrCast(@alignCast("ipv6"))).*;
 
     var buf: [16]u8 = undefined;
     const pattern = try std.fmt.bufPrint(&buf, "{x}", .{expected});
