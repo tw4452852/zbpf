@@ -94,9 +94,9 @@ fn create_trace_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
     const syscalls = if (b.option([]const []const u8, "syscall", "trace the specified syscall")) |v| v else &.{};
     const uprobes = if (b.option([]const []const u8, "uprobe", "trace the specified userspace function")) |v| v else &.{};
 
-    var content = std.ArrayList(u8).init(b.allocator);
+    var content: std.Io.Writer.Allocating = .init(b.allocator);
     defer content.deinit();
-    const w = content.writer();
+    const w = &content.writer;
     try w.writeAll(
         \\pub const Kind = enum { kprobe, syscall, uprobe };
         \\pub const TraceFunc = struct {
@@ -111,7 +111,7 @@ fn create_trace_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
     );
 
     const generate_one = struct {
-        fn generate_one(writer: std.ArrayList(u8).Writer, kind: []const u8, l: []const u8) !void {
+        fn generate_one(writer: *std.Io.Writer, kind: []const u8, l: []const u8) !void {
             const colon = std.mem.indexOfScalar(u8, l, ':');
             const name = if (colon) |ci| l[0..ci] else l;
             try writer.print(".{{ .kind = .{s}, .name = \"{s}\", ", .{ kind, name });

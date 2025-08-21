@@ -79,7 +79,7 @@ const Context = struct {
 
     fn addTokenFmt(ctx: *Context, tag: TokenTag, comptime format: []const u8, args: anytype) Allocator.Error!TokenIndex {
         const start_index = ctx.buf.items.len;
-        try ctx.buf.writer().print(format ++ " ", args);
+        try ctx.buf.writer(ctx.gpa).print(format ++ " ", args);
 
         try ctx.tokens.append(ctx.gpa, .{
             .tag = tag,
@@ -247,7 +247,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                 pointee = 0;
             }
 
-            try chain.append(i);
+            try chain.append(ctx.gpa, i);
             defer _ = chain.pop();
             break :blk try ctx.addNode(.{
                 .tag = .optional_type,
@@ -286,7 +286,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             });
         },
         .typedef, .@"volatile", .@"const", .restrict => blk: {
-            try chain.append(i);
+            try chain.append(ctx.gpa, i);
             defer _ = chain.pop();
             break :blk try add_child_node(btf, t.unnamed_0.type, names, ctx, chain);
         },
@@ -295,9 +295,9 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             const signed: bool = c.btf_kflag(t);
             const vals = c.btf_enum(t);
             const val64s = c.btf_enum64(t);
-            var members = std.ArrayList(NodeIndex).init(ctx.gpa);
-            try members.ensureUnusedCapacity(vlen);
-            defer members.deinit();
+            var members: std.ArrayList(NodeIndex) = .empty;
+            try members.ensureUnusedCapacity(ctx.gpa, vlen);
+            defer members.deinit(ctx.gpa);
 
             const enum_tok = try ctx.addToken(.keyword_enum, "enum");
             const arg_node = arg: {
@@ -341,7 +341,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                     .main_token = try ctx.addTokenFmt(.number_literal, "{}", .{abs_val}),
                     .data = undefined,
                 });
-                try members.append(try ctx.addNode(.{
+                try members.append(ctx.gpa, try ctx.addNode(.{
                     .tag = .container_field_init,
                     .main_token = name_tok,
                     .data = .{ .node_and_opt_node = .{
@@ -383,7 +383,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             if (found_loop(chain, i)) {
                 @panic(try std.fmt.allocPrint(ctx.gpa, "{} array loop: {any}\n", .{ i, chain.items }));
             }
-            try chain.append(i);
+            try chain.append(ctx.gpa, i);
             defer _ = chain.pop();
             const elem_type_expr = try add_child_node(btf, elem_type, names, ctx, chain);
 
@@ -401,14 +401,14 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             const alignment = c.btf__align_of(btf, @intCast(i));
             const sz = t.unnamed_0.size;
             const m: [*c]const c.struct_btf_member = c.btf_members(t);
-            var members = std.ArrayList(NodeIndex).init(ctx.gpa);
-            try members.ensureUnusedCapacity(vlen);
-            defer members.deinit();
+            var members: std.ArrayList(NodeIndex) = .empty;
+            try members.ensureUnusedCapacity(ctx.gpa, vlen);
+            defer members.deinit(ctx.gpa);
 
             if (found_loop(chain, i)) {
                 @panic(try std.fmt.allocPrint(ctx.gpa, "{} struct loop: {any}\n", .{ i, chain.items }));
             }
-            try chain.append(i);
+            try chain.append(ctx.gpa, i);
             defer _ = chain.pop();
 
             dprint(" align({}) ", .{alignment});
@@ -461,7 +461,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                     // The reason for divCeil is that some unused fields may be missing in btf, e.g. struct ioam6_trace_hdr.
                     const bytes = try std.math.divCeil(usize, bits, 8);
                     for (0..bytes) |n| {
-                        try members.append(try add_field(ctx, "_zig_merged_bitfieds", m_off - bits + (n * 8), 8));
+                        try members.append(ctx.gpa, try add_field(ctx, "_zig_merged_bitfieds", m_off - bits + (n * 8), 8));
                     }
                 }
 
@@ -471,7 +471,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                     if (cur_bitoff < m_off) {
                         const bytes = try std.math.divExact(usize, m_off - cur_bitoff, 8);
                         for (0..bytes) |n| {
-                            try members.append(try add_field(ctx, "_zig_padding", cur_bitoff + n * 8, 8));
+                            try members.append(ctx.gpa, try add_field(ctx, "_zig_padding", cur_bitoff + n * 8, 8));
                         }
                     }
 
@@ -498,7 +498,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                         break :align_blk align_expr;
                     } else null;
 
-                    try members.append(try ctx.addNode(if (align_expr != null) .{
+                    try members.append(ctx.gpa, try ctx.addNode(if (align_expr != null) .{
                         .tag = .container_field_align,
                         .main_token = name_tok,
                         .data = .{ .node_and_node = .{
@@ -525,12 +525,12 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             if (bitfield_off_begin) |begin| {
                 const bytes = try std.math.divExact(usize, sz * 8 - begin, 8);
                 for (0..bytes) |n| {
-                    try members.append(try add_field(ctx, "_zig_merged_bitfieds", cur_bitoff + n * 8, 8));
+                    try members.append(ctx.gpa, try add_field(ctx, "_zig_merged_bitfieds", cur_bitoff + n * 8, 8));
                 }
             } else if (cur_bitoff < sz * 8) {
                 const bytes = try std.math.divExact(usize, sz * 8 - cur_bitoff, 8);
                 for (0..bytes) |n| {
-                    try members.append(try add_field(ctx, "_zig_padding", cur_bitoff + n * 8, 8));
+                    try members.append(ctx.gpa, try add_field(ctx, "_zig_padding", cur_bitoff + n * 8, 8));
                 }
             }
             _ = try ctx.addToken(.r_brace, "}");
@@ -562,7 +562,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             if (found_loop(chain, i)) {
                 @panic(try std.fmt.allocPrint(ctx.gpa, "{} union loop: {any}\n", .{ i, chain.items }));
             }
-            try chain.append(i);
+            try chain.append(ctx.gpa, i);
             defer _ = chain.pop();
 
             _ = try ctx.addToken(.keyword_extern, "extern");
@@ -639,7 +639,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             if (found_loop(chain, i)) {
                 @panic(try std.fmt.allocPrint(ctx.gpa, "{} func_proto loop: {any}\n", .{ i, chain.items }));
             }
-            try chain.append(i);
+            try chain.append(ctx.gpa, i);
             defer _ = chain.pop();
 
             const fn_token = try ctx.addToken(.keyword_fn, "fn");
@@ -696,7 +696,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             if (found_loop(chain, i)) {
                 @panic(try std.fmt.allocPrint(ctx.gpa, "{} func loop: {any}\n", .{ i, chain.items }));
             }
-            try chain.append(i);
+            try chain.append(ctx.gpa, i);
             defer _ = chain.pop();
             break :blk try ctx.addNode(.{
                 .tag = .ptr_type_aligned,
@@ -717,9 +717,9 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
 pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
     var ctx = Context{
         .gpa = gpa,
-        .buf = std.ArrayList(u8).init(gpa),
+        .buf = .empty,
     };
-    defer ctx.buf.deinit();
+    defer ctx.buf.deinit(gpa);
     defer ctx.nodes.deinit(gpa);
     defer ctx.extra_data.deinit(gpa);
     defer ctx.tokens.deinit(gpa);
@@ -731,16 +731,16 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
     });
 
     const root_members = blk: {
-        var result = std.ArrayList(NodeIndex).init(gpa);
-        defer result.deinit();
+        var result: std.ArrayList(NodeIndex) = .empty;
+        defer result.deinit(gpa);
         var names = Map.init(gpa);
         defer {
             var it = names.valueIterator();
             while (it.next()) |name| gpa.free(name.*);
             names.deinit();
         }
-        var chain = Chain.init(gpa);
-        defer chain.deinit();
+        var chain: Chain = .empty;
+        defer chain.deinit(gpa);
         var seen = std.StringHashMap(void).init(gpa);
         defer seen.deinit();
 
@@ -829,7 +829,7 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
                     child.toOptional(),
                 } },
             });
-            try result.append(idx);
+            try result.append(ctx.gpa, idx);
         }
 
         if (funcs_num > 0) {
@@ -840,8 +840,8 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
 
             const struct_tok = try ctx.addToken(.keyword_struct, "struct");
             _ = try ctx.addToken(.l_brace, "{");
-            var members = std.ArrayList(NodeIndex).init(gpa);
-            defer members.deinit();
+            var members: std.ArrayList(NodeIndex) = .empty;
+            defer members.deinit(ctx.gpa);
             seen.clearRetainingCapacity();
             for (1..c.btf__type_cnt(btf)) |i| {
                 const t: *const c.btf_type = c.btf__type_by_id(btf, @intCast(i));
@@ -869,7 +869,7 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
                         child.toOptional(),
                     } },
                 });
-                try members.append(idx);
+                try members.append(ctx.gpa, idx);
             }
             _ = try ctx.addToken(.r_brace, "}");
             _ = try ctx.addToken(.semicolon, ";");
@@ -880,7 +880,7 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
                 .data = .{ .extra_range = span },
             });
 
-            try result.append(try ctx.addNode(.{
+            try result.append(ctx.gpa, try ctx.addNode(.{
                 .tag = .simple_var_decl,
                 .main_token = func_const_tok,
                 .data = .{ .opt_node_and_opt_node = .{
@@ -901,7 +901,7 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
         .start = @as(u32, @intCast(ctx.buf.items.len)),
     });
 
-    const source_code = try ctx.buf.toOwnedSliceSentinel(0);
+    const source_code = try ctx.buf.toOwnedSliceSentinel(ctx.gpa, 0);
     var tree = std.zig.Ast{
         .source = source_code,
         .tokens = ctx.tokens.toOwnedSlice(),

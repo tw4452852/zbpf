@@ -42,8 +42,8 @@ test "perf_event" {
 
         // setup events perf buffer
         const events = libbpf.bpf_object__find_map_by_name(obj, "events").?;
-        var got = std.ArrayList(u8).init(allocator);
-        defer got.deinit();
+        var got: std.ArrayList(u8) = .empty;
+        defer got.deinit(allocator);
         var ctx = Ctx{
             .seen = 0,
             .got = &got,
@@ -78,5 +78,5 @@ fn on_sample(_ctx: ?*anyopaque, _: c_int, data: ?*anyopaque, _: u32) callconv(.c
     const s = std.mem.sliceTo(@as([*c]const u8, @ptrCast(data)), 0);
 
     ctx.seen += 1;
-    ctx.got.appendSlice(s) catch unreachable;
+    ctx.got.appendSlice(allocator, s) catch unreachable;
 }

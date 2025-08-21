@@ -48,6 +48,6 @@ test "trace_printk" {
         var fr = f.reader(&fb);
         _ = try std.Io.Reader.streamDelimiterLimit(&fr.interface, &aw.writer, '\n', .unlimited);
 
-        try testing.expectStringEndsWith(aw.getWritten(), "bpf_trace_printk: 123");
+        try testing.expectStringEndsWith(aw.written(), "bpf_trace_printk: 123");
     }
 }

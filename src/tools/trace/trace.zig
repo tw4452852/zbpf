@@ -119,12 +119,12 @@ pub fn main() !void {
         return error.LOAD;
     }
 
-    var links = std.ArrayList(*libbpf.bpf_link).init(allocator);
+    var links: std.ArrayList(*libbpf.bpf_link) = .empty;
     defer {
         for (links.items) |link| {
             _ = libbpf.bpf_link__destroy(link);
         }
-        links.deinit();
+        links.deinit(allocator);
     }
 
     var ksyms = Ksyms.init(allocator) catch null;
@@ -153,7 +153,7 @@ pub fn main() !void {
     // attach programs
     var cur_prog: ?*libbpf.bpf_program = null;
     while (libbpf.bpf_object__next_program(obj, cur_prog)) |prog| : (cur_prog = prog) {
-        try links.append(libbpf.bpf_program__attach(prog) orelse {
+        try links.append(allocator, libbpf.bpf_program__attach(prog) orelse {
             print("failed to attach prog {s}: {}\n", .{ libbpf.bpf_program__name(prog), std.posix.errno(-1) });
             return error.ATTACH;
         });
@@ -318,8 +318,8 @@ const Ksyms = struct {
         defer f.close();
         var line_buf: [256]u8 = undefined;
         var r = f.reader(&line_buf);
-        var entries = std.ArrayList(Entry).init(allocator);
-        errdefer entries.deinit();
+        var entries: std.ArrayList(Entry) = .empty;
+        errdefer entries.deinit(allocator);
         var stext: ?u64 = null;
 
         while (r.interface.takeDelimiterExclusive('\n')) |line| {
@@ -328,7 +328,7 @@ const Ksyms = struct {
             const t = it.next().?; // type
             if (!std.ascii.eqlIgnoreCase(t, "t")) continue;
             const name = it.next().?;
-            try entries.append(.{ .name = try allocator.dupe(u8, name), .addr = addr });
+            try entries.append(allocator, .{ .name = try allocator.dupe(u8, name), .addr = addr });
             if (std.mem.eql(u8, name, "_stext")) stext = addr;
         } else |err| switch (err) {
             error.EndOfStream => {},
@@ -343,7 +343,7 @@ const Ksyms = struct {
         }.lessThan);
 
         return .{
-            .syms = try entries.toOwnedSlice(),
+            .syms = try entries.toOwnedSlice(allocator),
             .stext_addr = stext.?,
         };
     }

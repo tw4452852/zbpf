@@ -49,6 +49,6 @@ test "panic" {
         var fr = f.reader(&fb);
         _ = try std.Io.Reader.streamDelimiterLimit(&fr.interface, &aw.writer, '\n', .unlimited);
 
-        try testing.expectStringEndsWith(aw.getWritten(), "trace_printk: Panic: test");
+        try testing.expectStringEndsWith(aw.written(), "trace_printk: Panic: test");
     }
 }

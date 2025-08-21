@@ -139,10 +139,10 @@ pub fn main() !void {
     // add extern ksyms
     var scn = c.elf_nextscn(elf, null);
     const vmlinux_btf = if (vmlinux_arg) |vmlinux| c.btf__parse(vmlinux, null) else c.btf__load_vmlinux_btf();
-    var ksym_ids = std.ArrayList(u32).init(allocator);
+    var ksym_ids: std.ArrayList(u32) = .empty;
     var created_type_ids = std.AutoHashMap(u32, u32).init(allocator); // map from src to dst type id
     defer {
-        ksym_ids.deinit();
+        ksym_ids.deinit(allocator);
         created_type_ids.deinit();
     }
     while (scn) |section| : (scn = c.elf_nextscn(elf, scn)) {
@@ -165,7 +165,7 @@ pub fn main() !void {
                         return error.PARSE;
                     };
                     if (!externs_with_btf.contains(std.mem.sliceTo(name, 0))) {
-                        try ksym_ids.append(try add_kernel_func_btf(dst_btf, name, vmlinux_btf.?, allocator, &created_type_ids));
+                        try ksym_ids.append(allocator, try add_kernel_func_btf(dst_btf, name, vmlinux_btf.?, allocator, &created_type_ids));
                     }
                 }
             }
@@ -301,10 +301,10 @@ fn do_add_btf_types(dst_btf: *c.btf, vmlinux_btf: *const c.btf, type_id: u32, al
     if (ret != 0) {
         return @intCast(new_type_id); // not iterable
     }
-    var fields_type_ids = std.ArrayList(u32).init(allocator);
-    defer fields_type_ids.deinit();
+    var fields_type_ids: std.ArrayList(u32) = .empty;
+    defer fields_type_ids.deinit(allocator);
     while (c.btf_field_iter_next(&type_it)) |field_type_id| {
-        try fields_type_ids.append(try do_add_btf_types(dst_btf, vmlinux_btf, field_type_id.*, allocator, created_type_ids));
+        try fields_type_ids.append(allocator, try do_add_btf_types(dst_btf, vmlinux_btf, field_type_id.*, allocator, created_type_ids));
     }
     const new_t: *c.btf_type = @constCast(c.btf__type_by_id(dst_btf, @intCast(new_type_id)));
     ret = c.btf_field_iter_init(&type_it, new_t, c.BTF_FIELD_ITER_IDS);
