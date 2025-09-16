@@ -79,7 +79,7 @@ const Context = struct {
 
     fn addTokenFmt(ctx: *Context, tag: TokenTag, comptime format: []const u8, args: anytype) Allocator.Error!TokenIndex {
         const start_index = ctx.buf.items.len;
-        try ctx.buf.writer(ctx.gpa).print(format ++ " ", args);
+        try ctx.buf.print(ctx.gpa, format ++ " ", args);
 
         try ctx.tokens.append(ctx.gpa, .{
             .tag = tag,
