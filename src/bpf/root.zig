@@ -25,22 +25,12 @@ pub const Uprobe = @import("uprobe.zig");
 /// Represent XDP in bpf program.
 pub const Xdp = @import("xdp.zig");
 
-pub inline fn printErr(comptime src: SourceLocation, ret: anytype) void {
+pub inline fn printErr(comptime src: SourceLocation, ret: c_long) void {
     const fmt = "error occur at %s:%d return %d";
     const file = @as(*const [src.file.len:0]u8, @ptrCast(src.file)).*;
     const line = src.line;
 
     _ = trace_printk(fmt, fmt.len + 1, @intFromPtr(&file), line, @bitCast(ret));
-}
-
-/// Exit current bpf program with the location information (by @src()) and
-/// error return value (this is usually the return value of bpf helpers).
-///
-/// These information will be dumped in the kernel's trace buffer.
-pub inline fn exit(comptime src: SourceLocation, ret: anytype) noreturn {
-    printErr(src, ret);
-
-    unreachable;
 }
 
 /// Default implementation of panic handler for bpf
@@ -56,8 +46,8 @@ pub inline fn panic(msg: []const u8, error_return_trace: ?*StackTrace, ret_addr:
 
     var buffer: [128]u8 = undefined;
     var list = std.ArrayListUnmanaged(u8).initBuffer(&buffer);
-    list.appendSliceBounded(msg) catch exit(@src(), @as(c_long, -1));
-    list.appendBounded(0) catch exit(@src(), @as(c_long, -1));
+    list.appendSliceBounded(msg) catch {};
+    list.appendBounded(0) catch {};
 
     const fmt = "Panic: %s";
     _ = trace_printk(fmt, fmt.len + 1, @intFromPtr(&buffer), 0, 0);
@@ -66,3 +56,7 @@ pub inline fn panic(msg: []const u8, error_return_trace: ?*StackTrace, ret_addr:
 }
 
 export const _license linksection("license") = "GPL".*;
+
+export fn __bpf_trap() c_long {
+    return 0xdead;
+}

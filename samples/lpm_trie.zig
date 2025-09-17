@@ -1,6 +1,5 @@
 const std = @import("std");
 const bpf = @import("bpf");
-const exit = bpf.exit;
 
 const Ipv4LpmKey = extern struct {
     prefixlen: u32,
@@ -16,13 +15,22 @@ export fn test_lpm_trie() linksection("xdp") c_int {
     };
 
     const nonexist = src_map.lookup(src_key);
-    if (nonexist != null) exit(@src(), @as(c_long, 1));
+    if (nonexist != null) {
+        bpf.printErr(@src(), @as(c_long, 1));
+        return 1;
+    }
 
     src_key.data = 16777343; // 127.0.0.1
 
     if (src_map.lookup(src_key)) |v| {
-        if (v.* != 1) exit(@src(), @as(c_long, 1));
-    } else exit(@src(), @as(c_long, 1));
+        if (v.* != 1) {
+            bpf.printErr(@src(), @as(c_long, 1));
+            return 1;
+        }
+    } else {
+        bpf.printErr(@src(), @as(c_long, 1));
+        return 1;
+    }
 
     src_map.delete(src_key);
 

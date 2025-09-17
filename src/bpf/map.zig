@@ -5,7 +5,7 @@ const kernelMapDef = std.os.linux.BPF.kern.MapDef;
 const StructField = std.builtin.Type.StructField;
 const Declaration = std.builtin.Type.Declaration;
 const vmlinux = @import("vmlinux");
-const exit = @import("root.zig").exit;
+const printErr = @import("root.zig").printErr;
 
 /// BPF map updating strategy.
 pub const MapUpdateType = enum(u64) {
@@ -105,7 +105,7 @@ fn Map(
             );
             return switch (rc) {
                 0 => {},
-                else => exit(@src(), rc),
+                else => printErr(@src(), rc),
             };
         }
 
@@ -114,7 +114,7 @@ fn Map(
             const rc = helpers.map_delete_elem(@ptrCast(&Self.def), &key);
             return switch (rc) {
                 0 => {},
-                else => exit(@src(), rc),
+                else => printErr(@src(), rc),
             };
         }
     };
@@ -214,7 +214,7 @@ pub fn PerfEventArray(
             const rc = helpers.perf_event_output(ctx, @ptrCast(&@TypeOf(self.map).def), if (index) |i| i else 0xffffffff, @constCast(data.ptr), data.len);
             return switch (rc) {
                 0 => {},
-                else => exit(@src(), rc),
+                else => printErr(@src(), rc),
             };
         }
     };
@@ -256,13 +256,13 @@ pub fn RingBuffer(
             });
             return switch (rc) {
                 0 => {},
-                else => exit(@src(), rc),
+                else => printErr(@src(), rc),
             };
         }
 
         /// Reserve a space with header type `T`and `trailing_size` bytes of trailing in the ring buffer.
         /// If any error happens, current program will exit immediately.
-        pub fn reserve(self: *const Self, comptime T: type, comptime trailing_size: usize) struct {
+        pub fn reserve(self: *const Self, comptime T: type, comptime trailing_size: usize) ?struct {
             /// Pointer to the allocated header space.
             header_ptr: *T,
 
@@ -277,7 +277,9 @@ pub fn RingBuffer(
             if (helpers.ringbuf_reserve(&@TypeOf(self.map).def, @sizeOf(T) + trailing_size, 0)) |ptr| return .{
                 .header_ptr = @ptrCast(@alignCast(ptr)),
                 .trail_ptr = @ptrFromInt(@intFromPtr(ptr) + @sizeOf(T)),
-            } else exit(@src(), @as(c_long, -1));
+            } else {
+                return null;
+            }
         }
     };
 }
@@ -311,7 +313,7 @@ pub fn StackTraceMap(
         pub fn get_current_stack(self: *const Self, ctx: *anyopaque, flag: u64) u32 {
             const rc = helpers.get_stackid(ctx, @ptrCast(&@TypeOf(self.map).def), flag);
             if (rc < 0) {
-                exit(@src(), @as(c_long, rc));
+                printErr(@src(), @as(c_long, rc));
             }
             return @intCast(rc);
         }

@@ -60,7 +60,10 @@ fn generate(comptime id: u32, comptime tf: build_options.TraceFunc) type {
             const flags = BPF_F_REUSE_STACKID | if (tf.kind == .uprobe) BPF_F_USER_STACK else 0;
             const stack_id = if (tf.with_stack) stackmap.get_current_stack(ctx, flags) else -1;
 
-            const resv = events.reserve(TRACE_RECORD, entry_extra_size + @sizeOf([64]vmlinux.perf_branch_entry));
+            const resv = events.reserve(TRACE_RECORD, entry_extra_size + @sizeOf([64]vmlinux.perf_branch_entry)) orelse {
+                bpf.printErr(@src(), @as(c_long, 1));
+                return 1;
+            };
             resv.header_ptr.* = .{
                 .id = id,
                 .tpid = tpid,
@@ -93,7 +96,10 @@ fn generate(comptime id: u32, comptime tf: build_options.TraceFunc) type {
 
         fn _exit(ctx: *F.Ctx()) linksection(F.exit_section()) callconv(.c) c_long {
             const tpid = helpers.get_current_pid_tgid();
-            const resv = events.reserve(TRACE_RECORD, exit_extra_size);
+            const resv = events.reserve(TRACE_RECORD, exit_extra_size) orelse {
+                bpf.printErr(@src(), @as(c_long, 1));
+                return 1;
+            };
 
             resv.header_ptr.* = .{
                 .id = id,

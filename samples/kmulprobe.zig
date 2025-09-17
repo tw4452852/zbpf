@@ -19,14 +19,17 @@ export fn test_kmulprobe(regs: *REGS) linksection("kprobe.multi") callconv(.c) c
 export fn test_kmulretprobe(regs: *REGS) linksection("kretprobe.multi") callconv(.c) c_long {
     const tpid = helpers.get_current_pid_tgid();
     if (buffer.lookup(tpid)) |v| {
-        const resv = events.reserve(REGS, 0);
+        const resv = events.reserve(REGS, 0) orelse {
+            bpf.printErr(@src(), @as(c_long, 1));
+            return 1;
+        };
         resv.header_ptr.* = v.*;
         resv.header_ptr.ret_ptr().* = regs.ret_ptr().*;
         resv.commit();
     } else {
         const fmt = "exit failed\n";
         _ = trace_printk(fmt, fmt.len + 1, 0, 0, 0);
-        exit(@src(), @as(c_long, 1));
+        return 1;
     }
 
     return 0;

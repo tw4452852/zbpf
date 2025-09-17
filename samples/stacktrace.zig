@@ -19,8 +19,14 @@ export fn test_stacktrace(ctx: *tp.Ctx()) linksection(tp.section()) callconv(.c)
             i.* = @intCast(index);
             if (astackmap.lookup(0)) |p| {
                 _ = get_stack(ctx, p, @sizeOf(bpf.Map.STACK_TRACE), 0);
-            } else bpf.exit(@src(), @as(c_long, 1));
+            } else {
+                bpf.printErr(@src(), @as(c_long, 1));
+                return 1;
+            }
         }
-    } else bpf.exit(@src(), @as(c_long, 1));
+    } else {
+        bpf.printErr(@src(), @as(c_long, 1));
+        return 1;
+    }
     return 0;
 }
