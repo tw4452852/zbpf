@@ -40,11 +40,6 @@ pub inline fn printErr(comptime src: SourceLocation, ret: anytype) void {
 pub inline fn exit(comptime src: SourceLocation, ret: anytype) noreturn {
     printErr(src, ret);
 
-    asm volatile ("exit"
-        :
-        : [err] "{r0}" (0), // TODO: exit err?
-    );
-
     unreachable;
 }
 
@@ -66,11 +61,6 @@ pub inline fn panic(msg: []const u8, error_return_trace: ?*StackTrace, ret_addr:
 
     const fmt = "Panic: %s";
     _ = trace_printk(fmt, fmt.len + 1, @intFromPtr(&buffer), 0, 0);
-
-    asm volatile ("exit"
-        :
-        : [err] "{r0}" (0), // TODO: exit err?
-    );
 
     unreachable;
 }
