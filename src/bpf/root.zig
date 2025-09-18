@@ -45,7 +45,7 @@ pub inline fn panic(msg: []const u8, error_return_trace: ?*StackTrace, ret_addr:
     _ = ret_addr;
 
     var buffer: [128]u8 = undefined;
-    var list = std.ArrayListUnmanaged(u8).initBuffer(&buffer);
+    var list: std.ArrayList(u8) = .initBuffer(&buffer);
     list.appendSliceBounded(msg) catch {};
     list.appendBounded(0) catch {};
 
