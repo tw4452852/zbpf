@@ -323,6 +323,7 @@ const Ksyms = struct {
         var stext: ?u64 = null;
 
         while (r.interface.takeDelimiterExclusive('\n')) |line| {
+            defer r.interface.toss(1);
             var it = std.mem.tokenizeScalar(u8, line, ' ');
             const addr = try std.fmt.parseInt(u64, it.next().?, 16);
             const t = it.next().?; // type
@@ -372,16 +373,17 @@ const Ksyms = struct {
 const Addr2Line = struct {
     const Self = @This();
 
-    module: std.debug.Dwarf.ElfModule,
+    elf_file: std.debug.ElfFile,
     allocator: std.mem.Allocator,
     offset: u64,
 
     pub fn init(allocator: std.mem.Allocator, vmlinux_path: []const u8, stext_runtime_opt: ?u64) !Self {
-        var sections: std.debug.Dwarf.SectionArray = std.debug.Dwarf.null_section_array;
-        const module = std.debug.Dwarf.ElfModule.loadPath(allocator, .{ .root_dir = std.Build.Cache.Directory.cwd(), .sub_path = vmlinux_path }, null, null, &sections, null) catch |err| {
-            print("failed to load vmlinux debug info: {}\n", .{err});
-            return err;
-        };
+        var file = try std.fs.cwd().openFile(vmlinux_path, .{});
+        defer file.close();
+        var elf_file = try std.debug.ElfFile.load(allocator, file, null, &.native(vmlinux_path));
+        if (elf_file.dwarf) |*dwarf| {
+            try dwarf.open(allocator, elf_file.endian);
+        }
 
         const offset: u64 = if (stext_runtime_opt) |stext_runtime| blk: {
             const f = try std.fs.openFileAbsolute(vmlinux_path, .{});
@@ -412,15 +414,17 @@ const Addr2Line = struct {
             } else unreachable;
         } else 0;
 
-        return .{ .module = module, .allocator = allocator, .offset = offset };
+        return .{ .elf_file = elf_file, .allocator = allocator, .offset = offset };
     }
 
     pub fn find(self: *Self, addr: u64) ?std.debug.SourceLocation {
-        return if (self.module.getSymbolAtAddress(self.allocator, addr - self.offset)) |sym| sym.source_location else |_| null;
+        return if (self.elf_file.dwarf) |*dwarf| res: {
+            break :res if (dwarf.getSymbol(self.allocator, self.elf_file.endian, addr - self.offset)) |sym| sym.source_location else |_| null;
+        } else null;
     }
 
     pub fn deinit(self: *Self) void {
-        self.module.deinit(self.allocator);
+        self.elf_file.deinit(self.allocator);
         self.* = undefined;
     }
 };
