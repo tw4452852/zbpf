@@ -44,7 +44,7 @@ test "stacktrace" {
         };
         defer _ = libbpf.bpf_link__destroy(link);
 
-        std.Thread.sleep(10);
+        try std.Io.Clock.Duration.sleep(.{ .clock = .awake, .raw = .fromNanoseconds(10) }, testing.io);
 
         var v: STACK_TRACE = undefined;
         var av: STACK_TRACE = undefined;

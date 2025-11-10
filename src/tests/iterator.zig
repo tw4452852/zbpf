@@ -30,7 +30,7 @@ test "iterator" {
         const f = std.fs.File{ .handle = fd };
         defer f.close();
         var fb: [@sizeOf(u64)]u8 = undefined;
-        var r = f.reader(&fb);
+        var r = f.reader(testing.io, &fb);
 
         const expect = blk: {
             var n: u64 = 0;

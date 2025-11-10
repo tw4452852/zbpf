@@ -54,7 +54,7 @@ test "perf_event" {
         const expected_count = 3;
         const expected_str = "hello" ** expected_count;
         for (0..expected_count) |_| {
-            std.Thread.sleep(11);
+            try std.Io.Clock.Duration.sleep(.{ .clock = .awake, .raw = .fromNanoseconds(11) }, testing.io);
         }
 
         ret = libbpf.perf_buffer__consume(perf_buf);

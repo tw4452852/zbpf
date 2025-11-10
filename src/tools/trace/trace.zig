@@ -64,6 +64,10 @@ pub fn main() !void {
 
     const allocator = arena.allocator();
 
+    var threaded: std.Io.Threaded = .init(allocator);
+    defer threaded.deinit();
+    const io = threaded.io();
+
     const args = try process.argsAlloc(allocator);
     defer process.argsFree(allocator, args);
     var arg_idx: usize = 1; // skip exe name
@@ -127,7 +131,7 @@ pub fn main() !void {
         links.deinit(allocator);
     }
 
-    var ksyms = Ksyms.init(allocator) catch null;
+    var ksyms = Ksyms.init(allocator, io) catch null;
     defer if (ksyms) |*ks| ks.deinit(allocator);
 
     var lbr_opt = LBR.init(allocator) catch null;
@@ -164,7 +168,7 @@ pub fn main() !void {
     if (testing) {
         _ = testing_call(1, 2);
     }
-    const begin_ts = std.time.timestamp();
+    const begin_ts = (try std.Io.Clock.real.now(io)).toSeconds();
     var consumed: usize = 0;
     while (!exiting) {
         if (max_count) |max| {
@@ -183,13 +187,13 @@ pub fn main() !void {
         }
 
         if (seconds) |timeout| {
-            const cur_ts = std.time.timestamp();
+            const cur_ts = (try std.Io.Clock.real.now(io)).toSeconds();
             if (cur_ts - begin_ts > timeout) break;
         }
     }
 }
 
-fn interrupt_handler(_: c_int) callconv(.c) void {
+fn interrupt_handler(_: std.os.linux.SIG) callconv(.c) void {
     exiting = true;
 }
 
@@ -313,11 +317,11 @@ const Ksyms = struct {
     syms: []Entry, // in address asending order
     stext_addr: u64,
 
-    pub fn init(allocator: std.mem.Allocator) !Ksyms {
+    pub fn init(allocator: std.mem.Allocator, io: std.Io) !Ksyms {
         const f = try std.fs.openFileAbsolute("/proc/kallsyms", .{});
         defer f.close();
         var line_buf: [256]u8 = undefined;
-        var r = f.reader(&line_buf);
+        var r = f.reader(io, &line_buf);
         var entries: std.ArrayList(Entry) = .empty;
         errdefer entries.deinit(allocator);
         var stext: ?u64 = null;

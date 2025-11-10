@@ -32,7 +32,7 @@ test "tracepoint" {
         };
         defer _ = libbpf.bpf_link__destroy(link);
 
-        std.Thread.sleep(10);
+        try std.Io.Clock.Duration.sleep(.{ .clock = .awake, .raw = .fromNanoseconds(10) }, testing.io);
 
         // expect map[0] > 1
         const k: u32 = 0;

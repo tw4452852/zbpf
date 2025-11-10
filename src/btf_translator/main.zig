@@ -933,7 +933,7 @@ fn verify_generated(source_code: [:0]const u8, gpa: std.mem.Allocator) !void {
         try wip_errors.addZirErrorMessages(zir, tree, source_code, "generated");
         var error_bundle = try wip_errors.toOwnedBundle("");
         defer error_bundle.deinit(gpa);
-        error_bundle.renderToStdErr(std.zig.Color.renderOptions(.auto));
+        error_bundle.renderToStdErr(.{}, .auto);
         print("generated:\n{s}\n", .{source_code});
         return error.FAILED;
     }

@@ -46,7 +46,7 @@ test "panic" {
         var aw: std.Io.Writer.Allocating = .init(allocator);
         defer aw.deinit();
         var fb: [128]u8 = undefined;
-        var fr = f.reader(&fb);
+        var fr = f.reader(testing.io, &fb);
         _ = try std.Io.Reader.streamDelimiterLimit(&fr.interface, &aw.writer, '\n', .unlimited);
 
         try testing.expectStringEndsWith(aw.written(), "trace_printk: Panic: test");
