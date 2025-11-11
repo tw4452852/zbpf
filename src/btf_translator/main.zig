@@ -417,7 +417,9 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             const struct_tok = try ctx.addToken(.keyword_struct, "struct");
 
             _ = try ctx.addToken(.l_brace, "{");
-            var bitfield_off_begin: ?usize = null;
+            // Assuming the bitfield is at the beginning.
+            // This is to fix the corner case that implicit bitfield as the first member, e.g struct leaf_0x2_reg
+            var bitfield_off_begin: ?usize = 0;
             var cur_bitoff: usize = 0;
 
             const add_field = struct {
