@@ -417,7 +417,9 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             const struct_tok = try ctx.addToken(.keyword_struct, "struct");
 
             _ = try ctx.addToken(.l_brace, "{");
-            var bitfield_off_begin: ?usize = null;
+            // Assuming the bitfield is at the beginning.
+            // This is to fix the corner case that implicit bitfield as the first member, e.g struct leaf_0x2_reg
+            var bitfield_off_begin: ?usize = 0;
             var cur_bitoff: usize = 0;
 
             const add_field = struct {
@@ -525,7 +527,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
             if (bitfield_off_begin) |begin| {
                 const bytes = try std.math.divExact(usize, sz * 8 - begin, 8);
                 for (0..bytes) |n| {
-                    try members.append(ctx.gpa, try add_field(ctx, "_zig_merged_bitfieds", cur_bitoff + n * 8, 8));
+                    try members.append(ctx.gpa, try add_field(ctx, "_zig_merged_bitfieds", begin + n * 8, 8));
                 }
             } else if (cur_bitoff < sz * 8) {
                 const bytes = try std.math.divExact(usize, sz * 8 - cur_bitoff, 8);
@@ -1486,6 +1488,33 @@ test "bitfields" {
         \\    _zig_merged_bitfieds_offset_16_24: u8,
         \\    _zig_merged_bitfieds_offset_24_32: u8,
         \\    f3: ptr_to_foo align(1),
+        \\};
+        \\
+    ;
+    try std.testing.expectEqualStrings(expect, got);
+    try verify_generated(got, gpa);
+}
+
+test "implicit bitfield as the first member" {
+    const gpa = std.testing.allocator;
+    const btf = c.btf__new_empty();
+    assert(c.libbpf_get_error(btf) == 0);
+    defer c.btf__free(btf);
+
+    const t = c.btf__add_int(btf, "foo", 4, 0);
+    assert(t > 0);
+    assert(c.btf__add_struct(btf, "bar", 4) > 0);
+    assert(c.btf__add_field(btf, "f1", t, 31, 1) == 0);
+
+    const got = try translate(gpa, btf);
+    defer gpa.free(got);
+    const expect =
+        \\pub const foo = u32;
+        \\pub const bar = extern struct {
+        \\    _zig_merged_bitfieds_offset_0_8: u8,
+        \\    _zig_merged_bitfieds_offset_8_16: u8,
+        \\    _zig_merged_bitfieds_offset_16_24: u8,
+        \\    _zig_merged_bitfieds_offset_24_32: u8,
         \\};
         \\
     ;
