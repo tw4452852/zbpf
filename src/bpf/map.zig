@@ -26,9 +26,15 @@ fn Map(
     comptime max_entries: u32,
     comptime map_flags: u32,
 ) type {
-    const field_names = [_][]const u8{
+    var field_names: []const []const u8 = &.{
         "type", "key", "value",
-    } ++ (if (max_entries > 0) [_][]const u8{"max_entries"} else [_][]const u8{}) ++ (if (map_flags > 0) [_][]const u8{"map_flags"} else [_][]const u8{});
+    };
+    if (max_entries > 0) {
+        field_names = field_names ++ @as([]const []const u8, &.{"max_entries"});
+    }
+    if (map_flags > 0) {
+        field_names = field_names ++ @as([]const []const u8, &.{"map_flags"});
+    }
 
     const field_types = [_]type{
         ?*[@intFromEnum(map_type)]u8, ?*Key, ?*Value,
@@ -43,7 +49,7 @@ fn Map(
         };
     }
 
-    const Def = @Struct(.@"extern", null, &field_names, &field_types, &field_attrs);
+    const Def = @Struct(.@"extern", null, field_names, &field_types, &field_attrs);
 
     return struct {
         var def: Def = undefined;
