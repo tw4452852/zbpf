@@ -27,38 +27,30 @@ const in_bpf_program = switch (@import("builtin").cpu.arch) {
 /// Return argument context according to the specified kernel function prototype.
 pub fn Ctx(comptime func_name: []const u8) type {
     const f = @typeInfo(@typeInfo(@field(kfuncs, func_name)).pointer.child);
-    comptime var fields: []const StructField = &.{};
+    const fn_params = f.@"fn".params;
+    var field_names: [fn_params.len + 1][]const u8 = undefined;
+    var field_types: [fn_params.len + 1]type = undefined;
+    var field_attrs: [fn_params.len + 1]std.builtin.Type.StructField.Attributes = undefined;
 
-    for (0.., f.@"fn".params) |i, arg| {
-        fields = fields ++ [_]StructField{
-            .{
-                .name = std.fmt.comptimePrint("arg{}", .{i}),
-                .type = arg.type.?,
-                .default_value_ptr = null,
-                .is_comptime = false,
-                .alignment = @sizeOf(u64),
-            },
+    for (0..fn_params.len) |i| {
+        field_names[i] = std.fmt.comptimePrint("arg{}", .{i});
+        field_types[i] = fn_params[i].type.?;
+        field_attrs[i] = .{
+            .@"comptime" = false,
+            .@"align" = @sizeOf(u64),
+            .default_value_ptr = null,
         };
     }
 
-    fields = fields ++ [_]StructField{
-        .{
-            .name = "ret",
-            .type = f.@"fn".return_type.?,
-            .default_value_ptr = null,
-            .is_comptime = false,
-            .alignment = @sizeOf(u64),
-        },
+    field_names[fn_params.len] = "ret";
+    field_types[fn_params.len] = f.@"fn".return_type.?;
+    field_attrs[fn_params.len] = .{
+        .@"comptime" = false,
+        .@"align" = @sizeOf(u64),
+        .default_value_ptr = null,
     };
 
-    return @Type(.{
-        .@"struct" = .{
-            .layout = .@"extern",
-            .is_tuple = false,
-            .fields = fields,
-            .decls = &.{},
-        },
-    });
+    return @Struct(.@"extern", null, &field_names, &field_types, &field_attrs);
 }
 
 /// Represent `struct pt_regs` for different architectures.

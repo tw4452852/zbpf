@@ -17,7 +17,7 @@ pub fn build(b: *std.Build) !void {
         .name = "btf_translator",
         .root_module = mod,
     });
-    exe.linkLibrary(libbpf);
+    exe.root_module.linkLibrary(libbpf);
     b.installArtifact(exe);
 
     const test_filter = b.option([]const u8, "test", "test filter");
@@ -25,7 +25,7 @@ pub fn build(b: *std.Build) !void {
         .root_module = mod,
         .filters = if (test_filter) |f| &.{f} else &.{},
     });
-    test_exe.linkLibrary(libbpf);
+    test_exe.root_module.linkLibrary(libbpf);
     const run_test = b.addRunArtifact(test_exe);
     const test_step = b.step("test", "Build and run unit tests");
     test_step.dependOn(&run_test.step);

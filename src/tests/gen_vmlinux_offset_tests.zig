@@ -55,7 +55,7 @@ pub fn main() !void {
             const struct_sz = t.unnamed_0.size;
             const m: [*c]const c.struct_btf_member = c.btf_members(t);
             const vlen: u16 = c.btf_vlen(t);
-            const btf_name: [:0]const u8 = std.mem.sliceTo(c.btf__name_by_offset(btf, t.name_off), 0);
+            const btf_name: []const u8 = std.mem.sliceTo(c.btf__name_by_offset(btf, t.name_off), 0);
             const struct_name = if (btf_name.len != 0)
                 try gpa.dupe(u8, btf_name)
             else

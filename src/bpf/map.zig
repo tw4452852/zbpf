@@ -26,50 +26,24 @@ fn Map(
     comptime max_entries: u32,
     comptime map_flags: u32,
 ) type {
-    const fields = [_]StructField{
-        .{
-            .name = "type",
-            .type = ?*[@intFromEnum(map_type)]u8,
-            .default_value_ptr = null,
-            .is_comptime = false,
-            .alignment = @alignOf(?*[@intFromEnum(map_type)]u8),
-        },
-        .{
-            .name = "key",
-            .type = ?*Key,
-            .default_value_ptr = null,
-            .is_comptime = false,
-            .alignment = @alignOf(?*Key),
-        },
-        .{
-            .name = "value",
-            .type = ?*Value,
-            .default_value_ptr = null,
-            .is_comptime = false,
-            .alignment = @alignOf(?*Value),
-        },
-    } ++ (if (max_entries > 0) [_]StructField{.{
-        .name = "max_entries",
-        .type = ?*[max_entries]u8,
-        .default_value_ptr = null,
-        .is_comptime = false,
-        .alignment = @alignOf(?*[max_entries]u8),
-    }} else [_]StructField{}) ++ (if (map_flags > 0) [_]StructField{.{
-        .name = "map_flags",
-        .type = ?*[map_flags]u8,
-        .default_value_ptr = null,
-        .is_comptime = false,
-        .alignment = @alignOf(?*[map_flags]u8),
-    }} else [_]StructField{});
+    const field_names = [_][]const u8{
+        "type", "key", "value",
+    } ++ (if (max_entries > 0) [_][]const u8{"max_entries"} else [_][]const u8{}) ++ (if (map_flags > 0) [_][]const u8{"map_flags"} else [_][]const u8{});
 
-    const Def = @Type(.{
-        .@"struct" = .{
-            .layout = .@"extern",
-            .is_tuple = false,
-            .fields = &fields,
-            .decls = &[_]Declaration{},
-        },
-    });
+    const field_types = [_]type{
+        ?*[@intFromEnum(map_type)]u8, ?*Key, ?*Value,
+    } ++ (if (max_entries > 0) [_]type{?*[max_entries]u8} else [_]type{}) ++ (if (map_flags > 0) [_]type{?*[map_flags]u8} else [_]type{});
+
+    var field_attrs: [field_types.len]std.builtin.Type.StructField.Attributes = undefined;
+    for (0.., &field_attrs) |i, *field_attr| {
+        field_attr.* = .{
+            .@"comptime" = false,
+            .@"align" = @sizeOf(field_types[i]),
+            .default_value_ptr = null,
+        };
+    }
+
+    const Def = @Struct(.@"extern", null, &field_names, &field_types, &field_attrs);
 
     return struct {
         var def: Def = undefined;

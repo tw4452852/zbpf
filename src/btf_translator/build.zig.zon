@@ -4,8 +4,8 @@
     .paths = .{""},
     .dependencies = .{
         .libbpf = .{
-            .url = "https://github.com/tw4452852/libbpf_zig/archive/refs/tags/1.6.1-1.tar.gz",
-            .hash = "libbpf-1.6.1-1-x6jL2WieAAA8TXeArt0ySWg2Ewlh9AnTGnx1C4KB79By",
+            .url = "https://github.com/tw4452852/libbpf_zig/archive/f8c59e4adb68ba04f794c8f9c1e0b6a5d583a46e.tar.gz",
+            .hash = "libbpf-1.6.1-1-x6jL2c2eAAD_VmMTlVgQt7AeqZKlnbiRHi5QoySaclOn",
         },
     },
     .fingerprint = 0x512b4fc6bf46b1de,

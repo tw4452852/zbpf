@@ -16,8 +16,8 @@ pub fn build(b: *std.Build) !void {
         .root_module = mod,
     });
 
-    exe.linkLibrary(b.dependency("libelf", .{ .target = target, .optimize = optimize }).artifact("elf"));
-    exe.linkLibrary(b.dependency("libbpf", .{ .target = target, .optimize = optimize }).artifact("bpf"));
-    exe.addIncludePath(b.path("."));
+    exe.root_module.linkLibrary(b.dependency("libelf", .{ .target = target, .optimize = optimize }).artifact("elf"));
+    exe.root_module.linkLibrary(b.dependency("libbpf", .{ .target = target, .optimize = optimize }).artifact("bpf"));
+    exe.root_module.addIncludePath(b.path("."));
     b.installArtifact(exe);
 }

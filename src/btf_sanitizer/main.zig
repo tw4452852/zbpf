@@ -102,7 +102,7 @@ pub fn main() !void {
 
         if ((c.btf_is_fwd(t) or c.btf_is_struct(t)) and t.name_off > 0) {
             // replace non-alphabet with '_'
-            const name: [:0]u8 = @constCast(std.mem.sliceTo(c.btf__name_by_offset(dst_btf, t.name_off), 0));
+            const name: []u8 = @constCast(std.mem.sliceTo(c.btf__name_by_offset(dst_btf, t.name_off), 0));
             dbg_print("fix {s} type name {s}\n", .{ if (c.btf_is_fwd(t)) "forward" else "struct", name });
             for (name) |*ch| {
                 if (!std.ascii.isAlphabetic(ch.*)) {
@@ -129,7 +129,7 @@ pub fn main() !void {
             const s = c.btf__str_by_offset(dst_btf, t.name_off);
             try externs_with_btf.put(std.mem.sliceTo(s, 0), @intCast(i));
         } else if (c.btf_is_datasec(t) and t.name_off > 0) {
-            const name: [:0]u8 = @constCast(std.mem.sliceTo(c.btf__name_by_offset(dst_btf, t.name_off), 0));
+            const name: []u8 = @constCast(std.mem.sliceTo(c.btf__name_by_offset(dst_btf, t.name_off), 0));
             if (std.mem.eql(u8, name, ".kconfig")) {
                 found_kconfig_sec = true;
             }

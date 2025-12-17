@@ -759,14 +759,14 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
                 .ptr => {
                     const pointee = t.unnamed_0.type;
                     const pointee_t: *const c.btf_type = c.btf__type_by_id(btf, @intCast(pointee));
-                    const pointee_name: [:0]const u8 = std.mem.sliceTo(c.btf__name_by_offset(btf, pointee_t.name_off), 0);
+                    const pointee_name: []const u8 = std.mem.sliceTo(c.btf__name_by_offset(btf, pointee_t.name_off), 0);
                     break :name if (pointee_name.len != 0)
                         try std.fmt.allocPrint(gpa, "ptr_to_{s}", .{pointee_name})
                     else
                         try std.fmt.allocPrint(gpa, "ptr_{d}", .{i});
                 },
                 .@"enum", .enum64, .@"struct", .@"union" => {
-                    const name: [:0]const u8 = std.mem.sliceTo(c.btf__name_by_offset(btf, t.name_off), 0);
+                    const name: []const u8 = std.mem.sliceTo(c.btf__name_by_offset(btf, t.name_off), 0);
                     break :name if (name.len != 0)
                         try std.fmt.allocPrint(gpa, "{s}", .{name})
                     else
