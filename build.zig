@@ -210,10 +210,11 @@ fn create_test_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: s
     // Create bpf programs for test
     const build_options = b.addOptions();
     build_options.addOption(bool, "debug", debugging);
-    var sample_dir = try fs.cwd().openDir("samples", .{ .iterate = true });
-    defer sample_dir.close();
+    const io = b.graph.io;
+    var sample_dir = try std.Io.Dir.cwd().openDir(io, "samples", .{ .iterate = true });
+    defer sample_dir.close(io);
     var it = sample_dir.iterate();
-    while (try it.next()) |entry| {
+    while (try it.next(b.graph.io)) |entry| {
         if (test_filter) |f| {
             if (!std.mem.containsAtLeast(u8, entry.name, 1, f)) {
                 continue;

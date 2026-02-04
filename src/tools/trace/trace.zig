@@ -28,7 +28,7 @@ var testing = false;
 fn dbg_printf(level: libbpf.libbpf_print_level, fmt: [*c]const u8, args: @typeInfo(@typeInfo(@typeInfo(libbpf.libbpf_print_fn_t).optional.child).pointer.child).@"fn".params[2].type.?) callconv(.c) c_int {
     if (!debug and level == libbpf.LIBBPF_DEBUG) return 0;
 
-    return libbpf.vdprintf(std.fs.File.stderr().handle, fmt, args);
+    return libbpf.vdprintf(std.Io.File.stderr().handle, fmt, args);
 }
 
 fn usage() void {
@@ -58,18 +58,15 @@ export fn testing_call_nest(a: u32, b: u32) u32 {
     return a + b;
 }
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
     const allocator = arena.allocator();
 
-    var threaded: std.Io.Threaded = .init(allocator);
-    defer threaded.deinit();
-    const io = threaded.io();
+    const io = init.io;
 
-    const args = try process.argsAlloc(allocator);
-    defer process.argsFree(allocator, args);
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
     var arg_idx: usize = 1; // skip exe name
 
     var seconds: ?usize = null;
@@ -138,10 +135,10 @@ pub fn main() !void {
     defer if (lbr_opt) |*lbr| lbr.deinit();
 
     const stext_runtime: ?u64 = if (ksyms) |*ks| ks.stext_addr else null;
-    var add2line_opt = if (vmlinux_path) |p| Addr2Line.init(allocator, p, stext_runtime) catch null else null;
+    var add2line_opt = if (vmlinux_path) |p| Addr2Line.init(allocator, io, p, stext_runtime) catch null else null;
     defer if (add2line_opt) |*al| al.deinit();
 
-    var sw = std.fs.File.stdout().writerStreaming(&.{});
+    var sw = std.Io.File.stdout().writerStreaming(io, &.{});
     var ctx: Ctx = .{
         .stdout = sw,
         .stackmap = libbpf.bpf_object__find_map_by_name(obj, "stackmap"),
@@ -207,7 +204,7 @@ fn setup_ctrl_c() void {
 }
 
 const Ctx = struct {
-    stdout: std.fs.File.Writer,
+    stdout: std.Io.File.Writer,
     stackmap: ?*libbpf.bpf_map,
     al: ?*Addr2Line,
     ksyms: ?*const Ksyms,
@@ -318,8 +315,8 @@ const Ksyms = struct {
     stext_addr: u64,
 
     pub fn init(allocator: std.mem.Allocator, io: std.Io) !Ksyms {
-        const f = try std.fs.openFileAbsolute("/proc/kallsyms", .{});
-        defer f.close();
+        const f = try std.Io.Dir.openFileAbsolute(io, "/proc/kallsyms", .{});
+        defer f.close(io);
         var line_buf: [256]u8 = undefined;
         var r = f.reader(io, &line_buf);
         var entries: std.ArrayList(Entry) = .empty;
@@ -381,17 +378,17 @@ const Addr2Line = struct {
     allocator: std.mem.Allocator,
     offset: u64,
 
-    pub fn init(allocator: std.mem.Allocator, vmlinux_path: []const u8, stext_runtime_opt: ?u64) !Self {
-        var file = try std.fs.cwd().openFile(vmlinux_path, .{});
-        defer file.close();
-        var elf_file = try std.debug.ElfFile.load(allocator, file, null, &.native(vmlinux_path));
+    pub fn init(allocator: std.mem.Allocator, io: std.Io, vmlinux_path: []const u8, stext_runtime_opt: ?u64) !Self {
+        var file = try std.Io.Dir.cwd().openFile(io, vmlinux_path, .{});
+        defer file.close(io);
+        var elf_file = try std.debug.ElfFile.load(allocator, io, file, null, &.native(vmlinux_path));
         if (elf_file.dwarf) |*dwarf| {
             try dwarf.open(allocator, elf_file.endian);
         }
 
         const offset: u64 = if (stext_runtime_opt) |stext_runtime| blk: {
-            const f = try std.fs.openFileAbsolute(vmlinux_path, .{});
-            defer f.close();
+            const f = try std.Io.Dir.openFileAbsolute(io, vmlinux_path, .{});
+            defer f.close(io);
             const elf = libelf.elf_begin(f.handle, libelf.ELF_C_READ_MMAP, null).?;
             defer _ = libelf.elf_end(elf);
 

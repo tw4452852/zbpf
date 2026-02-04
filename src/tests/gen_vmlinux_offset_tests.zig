@@ -14,19 +14,19 @@ fn dprint(comptime fmt: []const u8, args: anytype) void {
 }
 
 // gen_vmlinux_offset_tests [-vmlinux/path/to/vmlinux] [-o/path/to/output_file] [-debug]
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
     const gpa = arena.allocator();
 
-    var it = std.process.args();
+    var it: std.process.Args.Iterator = .init(init.minimal.args);
     _ = it.skip(); // skip process name
-    var output: std.fs.File = std.fs.File.stdout();
+    var output: std.Io.File = .stdout();
     var vmlinux_arg: ?[:0]const u8 = null;
     while (it.next()) |arg| {
         if (std.mem.startsWith(u8, arg, "-o")) {
-            output = try std.fs.createFileAbsolute(arg["-o".len..], .{ .truncate = true });
+            output = try std.Io.Dir.createFileAbsolute(init.io, arg["-o".len..], .{ .truncate = true });
         } else if (std.mem.startsWith(u8, arg, "-vmlinux")) {
             vmlinux_arg = vmlinux_arg orelse arg["-vmlinux".len..];
         } else if (std.mem.startsWith(u8, arg, "-debug")) {
@@ -43,8 +43,8 @@ pub fn main() !void {
         return error.PARSE;
     }
 
-    defer output.close();
-    var w = output.writer(&.{});
+    defer output.close(init.io);
+    var w = output.writer(init.io, &.{});
     try w.interface.writeAll("const vmlinux = @import(\"vmlinux\");\n");
     try w.interface.writeAll("const std = @import(\"std\");\n");
 

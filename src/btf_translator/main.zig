@@ -15,20 +15,20 @@ fn dprint(comptime fmt: []const u8, args: anytype) void {
 }
 
 // btf_translator [-vmlinux/path/to/vmlinux] [-o/path/to/output_file] [-debug] [-syscalls]
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
     const gpa = arena.allocator();
 
-    var it = std.process.args();
+    var it: std.process.Args.Iterator = .init(init.minimal.args);
     _ = it.skip(); // skip process name
-    var output = std.fs.File.stdout();
+    var output = std.Io.File.stdout();
     var vmlinux_arg: ?[:0]const u8 = null;
     var include_syscalls = false;
     while (it.next()) |arg| {
         if (std.mem.startsWith(u8, arg, "-o")) {
-            output = try std.fs.createFileAbsolute(arg["-o".len..], .{ .truncate = true });
+            output = try std.Io.Dir.createFileAbsolute(init.io, arg["-o".len..], .{ .truncate = true });
         } else if (std.mem.startsWith(u8, arg, "-vmlinux")) {
             vmlinux_arg = vmlinux_arg orelse arg["-vmlinux".len..];
         } else if (std.mem.startsWith(u8, arg, "-debug")) {
@@ -47,9 +47,9 @@ pub fn main() !void {
         return error.PARSE;
     }
 
-    defer output.close();
+    defer output.close(init.io);
     const result = try translate(gpa, btf);
-    var w = output.writer(&.{});
+    var w = output.writer(init.io, &.{});
     try w.interface.writeAll("pub const Kernel = @This();\n");
     try w.interface.writeAll("pub const @\"void\" = anyopaque;\n");
     try w.interface.writeAll(result);
@@ -935,7 +935,7 @@ fn verify_generated(source_code: [:0]const u8, gpa: std.mem.Allocator) !void {
         try wip_errors.addZirErrorMessages(zir, tree, source_code, "generated");
         var error_bundle = try wip_errors.toOwnedBundle("");
         defer error_bundle.deinit(gpa);
-        error_bundle.renderToStdErr(.{}, .auto);
+        try error_bundle.renderToStderr(std.testing.io, .{}, .auto);
         print("generated:\n{s}\n", .{source_code});
         return error.FAILED;
     }
