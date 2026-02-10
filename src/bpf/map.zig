@@ -6,6 +6,7 @@ const StructField = std.builtin.Type.StructField;
 const Declaration = std.builtin.Type.Declaration;
 const vmlinux = @import("vmlinux");
 const printErr = @import("root.zig").printErr;
+const Xdp = @import("root.zig").Xdp;
 
 /// BPF map updating strategy.
 pub const MapUpdateType = enum(u64) {
@@ -171,6 +172,38 @@ pub fn ArrayMap(
     };
 }
 
+/// Represent `BPF_MAP_TYPE_PERCPU_ARRAY`.
+pub fn PerCpuArrayMap(
+    comptime name: []const u8,
+    comptime Value: type,
+    comptime max_entries: u32,
+    comptime flags: u32,
+) type {
+    return struct {
+        map: Map(name, .percpu_array, u32, Value, max_entries, flags),
+
+        const Self = @This();
+
+        /// Initialization.
+        pub fn init() Self {
+            return .{ .map = .{} };
+        }
+
+        /// Return the pointer to the entry at index.
+        /// If index out of range, return `null`.
+        /// If any error happens, current program will exit immediately.
+        pub fn lookup(self: *const Self) ?*Value {
+            return self.map.lookup(0);
+        }
+
+        /// Update the entry at index according to the specified strategy.
+        /// If any error happens, current program will exit immediately.
+        pub fn update(self: *const Self, index: u32, value: Value) void {
+            return self.map.update(.exist, index, value);
+        }
+    };
+}
+
 /// Represent `BPF_MAP_TYPE_PERF_EVENT_ARRAY`.
 pub fn PerfEventArray(
     comptime name: []const u8,
@@ -195,6 +228,42 @@ pub fn PerfEventArray(
             return switch (rc) {
                 0 => {},
                 else => printErr(@src(), rc),
+            };
+        }
+    };
+}
+
+/// Represent `BPF_MAP_TYPE_XSKMAP`.
+pub fn XskMap(
+    comptime name: []const u8,
+    comptime max_entries: u32,
+    comptime array_flags: u32,
+    //comptime success_action: Xdp.RET,
+    //comptime failure_action: Xdp.RET,
+) type {
+    return struct {
+        map: Map(name, .xskmap, u32, u32, max_entries, array_flags),
+
+        const Self = @This();
+
+        /// Initialization.
+        pub fn init() Self {
+            return .{ .map = .{} };
+        }
+
+        pub fn redirect(self: *const Self, rx_queue_index: u32) Xdp.RET {
+            const map_index: ?*u32 = self.map.lookup(rx_queue_index);
+            if (map_index == null) {
+                return Xdp.RET.aborted;
+            }
+
+            const rc: Xdp.RET = @enumFromInt(helpers.redirect_map(@ptrCast(&@TypeOf(self.map).def), rx_queue_index, 0));
+            return ret: switch (rc) {
+                Xdp.RET.redirect => rc,
+                else => {
+                    printErr(@src(), @intFromEnum(rc));
+                    break :ret rc;
+                },
             };
         }
     };
