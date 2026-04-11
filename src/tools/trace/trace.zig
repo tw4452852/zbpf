@@ -165,7 +165,7 @@ pub fn main(init: std.process.Init) !void {
     if (testing) {
         _ = testing_call(1, 2);
     }
-    const begin_ts = (try std.Io.Clock.real.now(io)).toSeconds();
+    const begin_ts = std.Io.Clock.real.now(io).toSeconds();
     var consumed: usize = 0;
     while (!exiting) {
         if (max_count) |max| {
@@ -184,7 +184,7 @@ pub fn main(init: std.process.Init) !void {
         }
 
         if (seconds) |timeout| {
-            const cur_ts = (try std.Io.Clock.real.now(io)).toSeconds();
+            const cur_ts = std.Io.Clock.real.now(io).toSeconds();
             if (cur_ts - begin_ts > timeout) break;
         }
     }
@@ -456,7 +456,7 @@ const LBR = struct {
     }
 
     pub fn deinit(self: *LBR) void {
-        for (self.fds) |fd| std.posix.close(fd);
+        for (self.fds) |fd| std.Io.Threaded.closeFd(fd);
         self.allocator.free(self.fds);
         self.* = undefined;
     }
