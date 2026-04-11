@@ -237,7 +237,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
         .ptr => blk: {
             var pointee = t.unnamed_0.type;
             var pkind = get_kind(btf, pointee);
-            while (pkind == .typedef or pkind == .@"const" or pkind == .@"volatile" or pkind == .restrict) {
+            while (pkind == .typedef or pkind == .@"const" or pkind == .@"volatile" or pkind == .restrict or pkind == .type_tag) {
                 const pt: *const c.btf_type = c.btf__type_by_id(btf, pointee);
                 pointee = pt.unnamed_0.type;
                 pkind = get_kind(btf, pointee);
@@ -285,7 +285,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                 } },
             });
         },
-        .typedef, .@"volatile", .@"const", .restrict => blk: {
+        .typedef, .@"volatile", .@"const", .restrict, .type_tag => blk: {
             try chain.append(ctx.gpa, i);
             defer _ = chain.pop();
             break :blk try add_child_node(btf, t.unnamed_0.type, names, ctx, chain);
@@ -709,7 +709,7 @@ fn add_child_node(btf: ?*c.btf, i: BTFIndex, names: *const Map, ctx: *Context, c
                 } },
             });
         },
-        .@"var", .datasec, .decl_tag, .type_tag => {
+        .@"var", .datasec, .decl_tag => {
             var buf: [32]u8 = undefined;
             @panic(try std.fmt.bufPrint(&buf, "unsupported kind: {s}", .{@tagName(kind)}));
         },
@@ -802,7 +802,7 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
             const kind: BTFKind = @enumFromInt(c.btf_kind(t));
 
             switch (kind) {
-                .@"var", .datasec, .decl_tag, .type_tag => {
+                .@"var", .datasec, .decl_tag => {
                     dprint("skip {s} {s}\n", .{ @tagName(kind), std.mem.sliceTo(c.btf__name_by_offset(btf, t.name_off), 0) });
                     continue;
                 },
@@ -1564,6 +1564,27 @@ test "dup function" {
         \\pub const kernel_funcs = struct {
         \\    pub const foo = *const func_proto_1;
         \\};
+        \\
+    ;
+    try std.testing.expectEqualStrings(expect, got);
+    try verify_generated(got, gpa);
+}
+
+test "type tag" {
+    const gpa = std.testing.allocator;
+    const btf = c.btf__new_empty();
+    assert(c.libbpf_get_error(btf) == 0);
+    defer c.btf__free(btf);
+
+    const t = c.btf__add_int(btf, "foo", 4, 0);
+    assert(t > 0);
+    assert(c.btf__add_type_tag(btf, "user", t) > 0);
+
+    const got = try translate(gpa, btf);
+    defer gpa.free(got);
+    const expect =
+        \\pub const foo = u32;
+        \\pub const type_tag_2 = foo;
         \\
     ;
     try std.testing.expectEqualStrings(expect, got);
