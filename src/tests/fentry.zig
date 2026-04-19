@@ -44,8 +44,8 @@ test "fentry" {
     };
     defer _ = libbpf.bpf_link__destroy(exit_link);
 
-    var buf: [64]u8 = undefined;
-    const n = std.os.linux.listxattr("/nonexist", &buf, buf.len);
+    const expect_mode = 64;
+    const n = std.os.linux.access("/nonexist", expect_mode);
 
     const k: u32 = 0;
     var arg2_got: usize = undefined;
@@ -60,6 +60,6 @@ test "fentry" {
         print("failed loopup map element: {}\n", .{std.posix.errno(-1)});
         return error.MAP_LOOKUP;
     }
-    try testing.expectEqual(buf.len, arg2_got);
+    try testing.expectEqual(expect_mode, arg2_got);
     try testing.expectEqual(n, rc_got);
 }

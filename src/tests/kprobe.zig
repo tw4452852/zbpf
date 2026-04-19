@@ -40,9 +40,9 @@ test "kprobe" {
     };
     defer _ = libbpf.bpf_link__destroy(exit_link);
 
-    var buf: [64]u8 = undefined;
+    const expect_mode = 64;
     const arg0 = "/nonexist";
-    const n = std.os.linux.listxattr(arg0, &buf, buf.len);
+    const n = std.os.linux.access(arg0, expect_mode);
 
     const k: u32 = 0;
     var got_entry: u64 = undefined;
@@ -58,6 +58,6 @@ test "kprobe" {
         return error.MAP_LOOKUP;
     }
 
-    try testing.expectEqual(@intFromPtr(arg0.ptr) + @intFromPtr(&buf) + buf.len, got_entry);
+    try testing.expectEqual(@intFromPtr(arg0.ptr) + expect_mode, got_entry);
     try testing.expectEqual(@as(isize, @bitCast(n)), got_ret);
 }

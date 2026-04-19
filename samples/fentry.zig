@@ -4,10 +4,10 @@ const bpf = @import("bpf");
 var entry = bpf.Map.ArrayMap("entry", u64, 1, 0).init();
 var exit = bpf.Map.ArrayMap("exit", i64, 1, 0).init();
 
-const tracked_func = bpf.Fentry{ .name = "path_listxattr" };
+const tracked_func = bpf.Fentry{ .name = "do_faccessat" };
 
 export fn test_fentry(args: *tracked_func.Ctx()) linksection(tracked_func.entry_section()) callconv(.c) c_long {
-    entry.update(.any, 0, args.arg2);
+    entry.update(.any, 0, @intCast(args.arg2));
     return 0;
 }
 

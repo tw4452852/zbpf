@@ -2,7 +2,7 @@ const std = @import("std");
 const bpf = @import("bpf");
 const vmlinux = @import("vmlinux");
 
-const tracked_func = bpf.Fentry{ .name = "path_listxattr" };
+const tracked_func = bpf.Fentry{ .name = "do_faccessat" };
 
 extern fn bpf_task_acquire(*vmlinux.task_struct) ?*vmlinux.task_struct;
 extern fn bpf_task_from_pid(i32) ?*vmlinux.task_struct;
