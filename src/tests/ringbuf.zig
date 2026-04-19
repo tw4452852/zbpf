@@ -54,7 +54,7 @@ test "ringbuf" {
         const expected_count = 3;
         const expected_str = "1" ** expected_count;
         for (0..expected_count) |_| {
-            try std.Io.Clock.Duration.sleep(.{ .clock = .awake, .raw = .fromNanoseconds(11) }, testing.io);
+            std.Thread.sleep(11);
         }
 
         const n = libbpf.ring_buffer__consume(ring_buf);

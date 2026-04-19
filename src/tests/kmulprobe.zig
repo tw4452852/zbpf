@@ -77,7 +77,7 @@ test "kmulprobe" {
     var buf: [64]u8 = undefined;
     var sx = std.mem.zeroes(std.os.linux.Statx);
     var expect_ret: i32 = @truncate(@as(isize, @bitCast(std.os.linux.listxattr("/nonexist", &buf, buf.len))));
-    expect_ret +%= @truncate(@as(isize, @bitCast(std.os.linux.statx(0, "/noexist", 0, .{}, &sx))));
+    expect_ret +%= @truncate(@as(isize, @bitCast(std.os.linux.statx(0, "/noexist", 0, 0, &sx))));
     const expect_arg2: i32 = buf.len + 0;
 
     const n = libbpf.ring_buffer__consume(ring_buf);

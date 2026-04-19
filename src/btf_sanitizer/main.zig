@@ -21,11 +21,11 @@ fn dbg_print(comptime fmt: []const u8, args: anytype) void {
 fn libbpf_dbg_printf(level: c.libbpf_print_level, fmt: [*c]const u8, args: @typeInfo(@typeInfo(@typeInfo(c.libbpf_print_fn_t).optional.child).pointer.child).@"fn".params[2].type.?) callconv(.c) c_int {
     if (!debug and level == c.LIBBPF_DEBUG) return 0;
 
-    return c.vdprintf(std.Io.File.stderr().handle, fmt, args);
+    return c.vdprintf(std.fs.File.stderr().handle, fmt, args);
 }
 
 // btf_sanitizer src_obj -o/path/to/dst_obj [-vmlinux/path/to/vmlinux] [-debug]
-pub fn main(init: std.process.Init) !void {
+pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
@@ -33,7 +33,7 @@ pub fn main(init: std.process.Init) !void {
 
     _ = c.libbpf_set_print(libbpf_dbg_printf);
 
-    var it: std.process.Args.Iterator = .init(init.minimal.args);
+    var it = std.process.args();
     _ = it.skip(); // skip process name
     var src_arg: ?[:0]const u8 = null;
     var dst_arg: ?[:0]const u8 = null;
@@ -54,14 +54,14 @@ pub fn main(init: std.process.Init) !void {
 
     const src_obj_path = src_arg.?;
     const dst_obj_path = dst_arg.?;
-    const cwd = std.Io.Dir.cwd();
-    try std.Io.Dir.copyFile(cwd, src_obj_path, cwd, dst_obj_path, init.io, .{});
+    const cwd = std.fs.cwd();
+    try std.fs.Dir.copyFile(cwd, src_obj_path, cwd, dst_obj_path, .{});
     dbg_print("sanitize obj from {s} to {s}\n", .{ src_obj_path, dst_obj_path });
 
-    const src_obj = try std.Io.Dir.openFile(cwd, init.io, src_obj_path, .{ .mode = .read_only });
-    defer src_obj.close(init.io);
-    const dst_obj = try std.Io.Dir.openFile(cwd, init.io, dst_obj_path, .{ .mode = .read_write });
-    defer dst_obj.close(init.io);
+    const src_obj = try std.fs.Dir.openFile(cwd, src_obj_path, .{ .mode = .read_only });
+    defer src_obj.close();
+    const dst_obj = try std.fs.Dir.openFile(cwd, dst_obj_path, .{ .mode = .read_write });
+    defer dst_obj.close();
 
     const src_btf = c.btf__parse(src_obj_path, null) orelse {
         print("failed to get source BTF: {}\n", .{std.posix.errno(-1)});
@@ -102,7 +102,7 @@ pub fn main(init: std.process.Init) !void {
 
         if ((c.btf_is_fwd(t) or c.btf_is_struct(t)) and t.name_off > 0) {
             // replace non-alphabet with '_'
-            const name: []u8 = @constCast(std.mem.sliceTo(c.btf__name_by_offset(dst_btf, t.name_off), 0));
+            const name: [:0]u8 = @constCast(std.mem.sliceTo(c.btf__name_by_offset(dst_btf, t.name_off), 0));
             dbg_print("fix {s} type name {s}\n", .{ if (c.btf_is_fwd(t)) "forward" else "struct", name });
             for (name) |*ch| {
                 if (!std.ascii.isAlphabetic(ch.*)) {
@@ -129,7 +129,7 @@ pub fn main(init: std.process.Init) !void {
             const s = c.btf__str_by_offset(dst_btf, t.name_off);
             try externs_with_btf.put(std.mem.sliceTo(s, 0), @intCast(i));
         } else if (c.btf_is_datasec(t) and t.name_off > 0) {
-            const name: []u8 = @constCast(std.mem.sliceTo(c.btf__name_by_offset(dst_btf, t.name_off), 0));
+            const name: [:0]u8 = @constCast(std.mem.sliceTo(c.btf__name_by_offset(dst_btf, t.name_off), 0));
             if (std.mem.eql(u8, name, ".kconfig")) {
                 found_kconfig_sec = true;
             }

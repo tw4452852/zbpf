@@ -52,7 +52,7 @@ test-11717   [005] d..21 10990692.273976: bpf_trace_printk: error occur at src/b
 
 ## Build
 
-- Download the [lastest Zig](https://ziglang.org/download/).
+- Download the [Zig 0.15.2](https://ziglang.org/download/).
 - Clone this repostory.
 - Build with `zig build zbpf -Dbpf=/path/to/your/bpf/prog.zig -Dmain=/path/to/your/main.zig`.
 

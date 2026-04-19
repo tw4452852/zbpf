@@ -157,7 +157,7 @@ fn create_trace_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
         "@build_options",
         build_options_mod,
     );
-    exe.root_module.linkLibrary(get_libelf(b, target, optimize));
+    exe.linkLibrary(get_libelf(b, target, optimize));
 }
 
 fn create_target_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, main_path: []const u8, prog: std.Build.LazyPath, exe_name: []const u8) *std.Build.Step.Compile {
@@ -176,7 +176,7 @@ fn create_target_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize:
     exe.root_module.addImport("bpf", b.modules.get("bpf").?);
     exe.root_module.addImport("vmlinux", b.modules.get("vmlinux").?);
 
-    exe.root_module.linkLibrary(get_libbpf(b, target, optimize));
+    exe.linkLibrary(get_libbpf(b, target, optimize));
 
     const description = b.fmt("Build {s}", .{exe_name});
     const build_step = b.step(exe_name, description);
@@ -203,18 +203,17 @@ fn create_test_step(b: *std.Build, target: std.Build.ResolvedTarget, optimize: s
         }),
         .filters = if (test_filter) |f| &.{f} else &.{},
     });
-    exe_tests.root_module.linkLibrary(get_libbpf(b, target, optimize));
+    exe_tests.linkLibrary(get_libbpf(b, target, optimize));
     exe_tests.root_module.addImport("bpf", b.modules.get("bpf").?);
     exe_tests.setExecCmd(&.{ "sudo", null });
 
     // Create bpf programs for test
     const build_options = b.addOptions();
     build_options.addOption(bool, "debug", debugging);
-    const io = b.graph.io;
-    var sample_dir = try std.Io.Dir.cwd().openDir(io, "samples", .{ .iterate = true });
-    defer sample_dir.close(io);
+    var sample_dir = try fs.cwd().openDir("samples", .{ .iterate = true });
+    defer sample_dir.close();
     var it = sample_dir.iterate();
-    while (try it.next(b.graph.io)) |entry| {
+    while (try it.next()) |entry| {
         if (test_filter) |f| {
             if (!std.mem.containsAtLeast(u8, entry.name, 1, f)) {
                 continue;
@@ -305,7 +304,7 @@ fn create_vmlinux_offset_test_step(b: *std.Build, target: std.Build.ResolvedTarg
             .link_libc = true,
         }),
     });
-    generator.root_module.linkLibrary(get_libbpf(b, host, optimize));
+    generator.linkLibrary(get_libbpf(b, host, optimize));
     const run_exe = b.addRunArtifact(generator);
 
     if (vmlinux_bin_path) |vmlinux| run_exe.addPrefixedFileArg("-vmlinux", .{ .cwd_relative = vmlinux });

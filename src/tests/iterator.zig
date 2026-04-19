@@ -27,10 +27,10 @@ test "iterator" {
         const link = libbpf.bpf_program__attach_iter(prog, null).?;
         defer _ = libbpf.bpf_link__destroy(link);
         const fd = libbpf.bpf_iter_create(libbpf.bpf_link__fd(link));
-        const f = std.Io.File{ .handle = fd, .flags = .{ .nonblocking = false } };
-        defer f.close(testing.io);
+        const f = std.fs.File{ .handle = fd };
+        defer f.close();
         var fb: [@sizeOf(u64)]u8 = undefined;
-        var r = f.reader(testing.io, &fb);
+        var r = f.reader(&fb);
 
         const expect = blk: {
             var n: u64 = 0;

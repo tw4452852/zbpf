@@ -52,6 +52,10 @@ pub inline fn panic(msg: []const u8, error_return_trace: ?*StackTrace, ret_addr:
     const fmt = "Panic: %s";
     _ = trace_printk(fmt, fmt.len + 1, @intFromPtr(&buffer), 0, 0);
 
+    asm volatile ("exit"
+        :
+        : [err] "{r0}" (0), // TODO: exit err?
+    );
     unreachable;
 }
 

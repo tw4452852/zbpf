@@ -11,7 +11,7 @@ pub const libbpf = @cImport({
 pub fn dbg_printf(level: libbpf.libbpf_print_level, fmt: [*c]const u8, args: @typeInfo(@typeInfo(@typeInfo(libbpf.libbpf_print_fn_t).optional.child).pointer.child).@"fn".params[2].type.?) callconv(.c) c_int {
     if (!build_options.debug and level == libbpf.LIBBPF_DEBUG) return 0;
 
-    return libbpf.vdprintf(std.Io.File.stderr().handle, fmt, args);
+    return libbpf.vdprintf(std.fs.File.stderr().handle, fmt, args);
 }
 
 pub fn btf_name_exist(name: []const u8) bool {
@@ -24,29 +24,29 @@ pub fn btf_name_exist(name: []const u8) bool {
 
 const tracefs_mount_dir = "./tracefs";
 
-pub fn open_tracebuf_pipe(clean: bool) !std.Io.File {
-    const cwd = std.Io.Dir.cwd();
-    cwd.createDir(std.testing.io, tracefs_mount_dir, .default_dir) catch |e| if (e != error.PathAlreadyExists) return e;
+pub fn open_tracebuf_pipe(clean: bool) !std.fs.File {
+    const cwd = std.fs.cwd();
+    cwd.makeDir(tracefs_mount_dir) catch |e| if (e != error.PathAlreadyExists) return e;
     const ret = std.posix.errno(std.os.linux.mount("zbpf_test", tracefs_mount_dir, "tracefs", 0, 0));
     if (ret != .SUCCESS) return error.MOUNT;
 
     // clean trace buffer if request
     if (clean) {
-        try cwd.writeFile(std.testing.io, .{
+        try cwd.writeFile(.{
             .sub_path = tracefs_mount_dir ++ "/trace",
             .data = "\n",
             .flags = .{},
         });
     }
 
-    return try cwd.openFile(std.testing.io, tracefs_mount_dir ++ "/trace_pipe", .{});
+    return try cwd.openFile(tracefs_mount_dir ++ "/trace_pipe", .{});
 }
 
-pub fn close_tracebuf_pipe(f: std.Io.File) void {
-    f.close(std.testing.io);
+pub fn close_tracebuf_pipe(f: std.fs.File) void {
+    f.close();
     const ret = std.posix.errno(std.os.linux.umount(tracefs_mount_dir));
     if (ret != .SUCCESS) @panic(@tagName(ret));
-    std.Io.Dir.cwd().deleteDir(std.testing.io, tracefs_mount_dir) catch unreachable;
+    std.fs.cwd().deleteDir(tracefs_mount_dir) catch unreachable;
 }
 
 test {

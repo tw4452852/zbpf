@@ -15,20 +15,20 @@ fn dprint(comptime fmt: []const u8, args: anytype) void {
 }
 
 // btf_translator [-vmlinux/path/to/vmlinux] [-o/path/to/output_file] [-debug] [-syscalls]
-pub fn main(init: std.process.Init) !void {
+pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
     const gpa = arena.allocator();
 
-    var it: std.process.Args.Iterator = .init(init.minimal.args);
+    var it = std.process.args();
     _ = it.skip(); // skip process name
-    var output = std.Io.File.stdout();
+    var output = std.fs.File.stdout();
     var vmlinux_arg: ?[:0]const u8 = null;
     var include_syscalls = false;
     while (it.next()) |arg| {
         if (std.mem.startsWith(u8, arg, "-o")) {
-            output = try std.Io.Dir.createFileAbsolute(init.io, arg["-o".len..], .{ .truncate = true });
+            output = try std.fs.createFileAbsolute(arg["-o".len..], .{ .truncate = true });
         } else if (std.mem.startsWith(u8, arg, "-vmlinux")) {
             vmlinux_arg = vmlinux_arg orelse arg["-vmlinux".len..];
         } else if (std.mem.startsWith(u8, arg, "-debug")) {
@@ -47,9 +47,9 @@ pub fn main(init: std.process.Init) !void {
         return error.PARSE;
     }
 
-    defer output.close(init.io);
+    defer output.close();
     const result = try translate(gpa, btf);
-    var w = output.writer(init.io, &.{});
+    var w = output.writer(&.{});
     try w.interface.writeAll("pub const Kernel = @This();\n");
     try w.interface.writeAll("pub const @\"void\" = anyopaque;\n");
     try w.interface.writeAll(result);
@@ -79,7 +79,7 @@ const Context = struct {
 
     fn addTokenFmt(ctx: *Context, tag: TokenTag, comptime format: []const u8, args: anytype) Allocator.Error!TokenIndex {
         const start_index = ctx.buf.items.len;
-        try ctx.buf.print(ctx.gpa, format ++ " ", args);
+        try ctx.buf.writer(ctx.gpa).print(format ++ " ", args);
 
         try ctx.tokens.append(ctx.gpa, .{
             .tag = tag,
@@ -759,14 +759,14 @@ pub fn translate(gpa: Allocator, btf: ?*c.struct_btf) ![:0]const u8 {
                 .ptr => {
                     const pointee = t.unnamed_0.type;
                     const pointee_t: *const c.btf_type = c.btf__type_by_id(btf, @intCast(pointee));
-                    const pointee_name: []const u8 = std.mem.sliceTo(c.btf__name_by_offset(btf, pointee_t.name_off), 0);
+                    const pointee_name: [:0]const u8 = std.mem.sliceTo(c.btf__name_by_offset(btf, pointee_t.name_off), 0);
                     break :name if (pointee_name.len != 0)
                         try std.fmt.allocPrint(gpa, "ptr_to_{s}", .{pointee_name})
                     else
                         try std.fmt.allocPrint(gpa, "ptr_{d}", .{i});
                 },
                 .@"enum", .enum64, .@"struct", .@"union" => {
-                    const name: []const u8 = std.mem.sliceTo(c.btf__name_by_offset(btf, t.name_off), 0);
+                    const name: [:0]const u8 = std.mem.sliceTo(c.btf__name_by_offset(btf, t.name_off), 0);
                     break :name if (name.len != 0)
                         try std.fmt.allocPrint(gpa, "{s}", .{name})
                     else
@@ -935,7 +935,7 @@ fn verify_generated(source_code: [:0]const u8, gpa: std.mem.Allocator) !void {
         try wip_errors.addZirErrorMessages(zir, tree, source_code, "generated");
         var error_bundle = try wip_errors.toOwnedBundle("");
         defer error_bundle.deinit(gpa);
-        try error_bundle.renderToStderr(std.testing.io, .{}, .auto);
+        error_bundle.renderToStdErr(std.zig.Color.renderOptions(.auto));
         print("generated:\n{s}\n", .{source_code});
         return error.FAILED;
     }

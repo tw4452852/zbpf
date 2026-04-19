@@ -14,19 +14,19 @@ fn dprint(comptime fmt: []const u8, args: anytype) void {
 }
 
 // gen_vmlinux_offset_tests [-vmlinux/path/to/vmlinux] [-o/path/to/output_file] [-debug]
-pub fn main(init: std.process.Init) !void {
+pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
     const gpa = arena.allocator();
 
-    var it: std.process.Args.Iterator = .init(init.minimal.args);
+    var it = std.process.args();
     _ = it.skip(); // skip process name
-    var output: std.Io.File = .stdout();
+    var output: std.fs.File = std.fs.File.stdout();
     var vmlinux_arg: ?[:0]const u8 = null;
     while (it.next()) |arg| {
         if (std.mem.startsWith(u8, arg, "-o")) {
-            output = try std.Io.Dir.createFileAbsolute(init.io, arg["-o".len..], .{ .truncate = true });
+            output = try std.fs.createFileAbsolute(arg["-o".len..], .{ .truncate = true });
         } else if (std.mem.startsWith(u8, arg, "-vmlinux")) {
             vmlinux_arg = vmlinux_arg orelse arg["-vmlinux".len..];
         } else if (std.mem.startsWith(u8, arg, "-debug")) {
@@ -43,8 +43,8 @@ pub fn main(init: std.process.Init) !void {
         return error.PARSE;
     }
 
-    defer output.close(init.io);
-    var w = output.writer(init.io, &.{});
+    defer output.close();
+    var w = output.writer(&.{});
     try w.interface.writeAll("const vmlinux = @import(\"vmlinux\");\n");
     try w.interface.writeAll("const std = @import(\"std\");\n");
 
@@ -55,7 +55,7 @@ pub fn main(init: std.process.Init) !void {
             const struct_sz = t.unnamed_0.size;
             const m: [*c]const c.struct_btf_member = c.btf_members(t);
             const vlen: u16 = c.btf_vlen(t);
-            const btf_name: []const u8 = std.mem.sliceTo(c.btf__name_by_offset(btf, t.name_off), 0);
+            const btf_name: [:0]const u8 = std.mem.sliceTo(c.btf__name_by_offset(btf, t.name_off), 0);
             const struct_name = if (btf_name.len != 0)
                 try gpa.dupe(u8, btf_name)
             else
