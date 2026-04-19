@@ -24,16 +24,6 @@ test "perf_event" {
     }
 
     if (libbpf.bpf_object__next_program(obj, null)) |prog| {
-        const my_pid = libbpf.bpf_object__find_map_by_name(obj, "my_pid").?;
-        // map[0] = current pid
-        const k: u32 = 0;
-        const v: u32 = std.Thread.getCurrentId();
-        ret = libbpf.bpf_map__update_elem(my_pid, &k, @sizeOf(@TypeOf(k)), &v, @sizeOf(@TypeOf(v)), 0);
-        if (ret != 0) {
-            print("failed update map element: {}\n", .{std.posix.errno(-1)});
-            return error.MAP_UPDATE;
-        }
-
         const link = libbpf.bpf_program__attach(prog) orelse {
             print("failed to attach prog {s}: {}\n", .{ libbpf.bpf_program__name(prog), std.posix.errno(-1) });
             return error.ATTACH;
@@ -54,7 +44,7 @@ test "perf_event" {
         const expected_count = 3;
         const expected_str = "hello" ** expected_count;
         for (0..expected_count) |_| {
-            std.Thread.sleep(11);
+            _ = std.os.linux.access("/nonexist", 123456);
         }
 
         ret = libbpf.perf_buffer__consume(perf_buf);
